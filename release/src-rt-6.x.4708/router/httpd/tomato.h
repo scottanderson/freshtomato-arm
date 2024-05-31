@@ -21,7 +21,6 @@
 
 #include <bcmutils.h>
 #include <bcmnvram.h>
-#include <utils.h>
 #include <shutils.h>
 #include <shared.h>
 
@@ -66,6 +65,7 @@ extern int resolve_addr(const char *ip, char *host);
 extern void asp_activeroutes(int argc, char **argv);
 extern void asp_cgi_get(int argc, char **argv);
 extern void asp_time(int argc, char **argv);
+extern void asp_ntp(int argc, char **argv);
 extern void asp_wanup(int argc, char **argv);
 extern void asp_wanstatus(int argc, char **argv);
 extern void asp_link_uptime(int argc, char **argv);

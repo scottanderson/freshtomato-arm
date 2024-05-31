@@ -1,37 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2012-2017 The Meson development team
 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from __future__ import annotations
 
 import subprocess, os.path
 import typing as T
 
-from ..mesonlib import EnvironmentException, MachineChoice
+from ..mesonlib import EnvironmentException
 
-from .compilers import Compiler, swift_buildtype_args, clike_debug_args
+from .compilers import Compiler, clike_debug_args
 
 if T.TYPE_CHECKING:
     from ..envconfig import MachineInfo
     from ..environment import Environment
-    from ..linkers import DynamicLinker
+    from ..linkers.linkers import DynamicLinker
+    from ..mesonlib import MachineChoice
 
-swift_optimization_args = {
+swift_optimization_args: T.Dict[str, T.List[str]] = {
+    'plain': [],
     '0': [],
     'g': [],
     '1': ['-O'],
     '2': ['-O'],
     '3': ['-O'],
     's': ['-O'],
-}  # type: T.Dict[str, T.List[str]]
+}
 
 class SwiftCompiler(Compiler):
 
@@ -42,7 +35,7 @@ class SwiftCompiler(Compiler):
     def __init__(self, exelist: T.List[str], version: str, for_machine: MachineChoice,
                  is_cross: bool, info: 'MachineInfo', full_version: T.Optional[str] = None,
                  linker: T.Optional['DynamicLinker'] = None):
-        super().__init__(exelist, version, for_machine, info,
+        super().__init__([], exelist, version, for_machine, info,
                          is_cross=is_cross, full_version=full_version,
                          linker=linker)
         self.version = version
@@ -56,7 +49,7 @@ class SwiftCompiler(Compiler):
     def get_dependency_gen_args(self, outtarget: str, outfile: str) -> T.List[str]:
         return ['-emit-dependencies']
 
-    def depfile_for_object(self, objfile: str) -> str:
+    def depfile_for_object(self, objfile: str) -> T.Optional[str]:
         return os.path.splitext(objfile)[0] + '.' + self.get_depfile_suffix()
 
     def get_depfile_suffix(self) -> str:
@@ -70,9 +63,6 @@ class SwiftCompiler(Compiler):
 
     def get_warn_args(self, level: str) -> T.List[str]:
         return []
-
-    def get_buildtype_args(self, buildtype: str) -> T.List[str]:
-        return swift_buildtype_args[buildtype]
 
     def get_std_exe_link_args(self) -> T.List[str]:
         return ['-emit-executable']
@@ -113,7 +103,7 @@ class SwiftCompiler(Compiler):
         pc = subprocess.Popen(self.exelist + extra_flags + ['-emit-executable', '-o', output_name, src], cwd=work_dir)
         pc.wait()
         if pc.returncode != 0:
-            raise EnvironmentException('Swift compiler %s can not compile programs.' % self.name_string())
+            raise EnvironmentException('Swift compiler %s cannot compile programs.' % self.name_string())
         if self.is_cross:
             # Can't check if the binaries run so we have to assume they do
             return

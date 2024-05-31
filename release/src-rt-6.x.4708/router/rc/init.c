@@ -255,6 +255,35 @@ static void setcaldata()
 		pclose(fp);
 	}
 }
+
+/* For Netgear Router to set rxgainerr data (get infos at board_data --> router specifc) (so far only EX7000) */
+static void setrxgainerrdata()
+{
+	int mtd = getMTD("board_data");
+	char cmd[64];
+	char line[256];
+	FILE *fp;
+
+	if (mtd == -1)
+		return;
+
+	snprintf(cmd, sizeof(cmd), "strings /dev/mtd%dro | grep rxgainerr", mtd);
+	fp = popen(cmd, "r");
+
+	if (fp != NULL) {
+		while (fgets(line, sizeof(line) - 1, fp) != NULL) {
+			if (strstr(line, "rxgainerr")) {
+				char *var, *val;
+				var = strtok(line, "=");
+				val = strtok(NULL, "=");
+
+				if ((var != NULL) && (val != NULL))
+					nvram_set(var, val);
+			}
+		}
+		pclose(fp);
+	}
+}
 #endif /* CONFIG_BCMWL6A */
 
 /* Set terminal settings to reasonable defaults */
@@ -399,9 +428,9 @@ static void shutdn(int rb)
 	_dprintf("shutdn rb=%d\n", rb);
 
 	sigemptyset(&ss);
-	for (i = 0; i < sizeof(fatalsigs) / sizeof(fatalsigs[0]); i++)
+	for (i = 0; i < ASIZE(fatalsigs); i++)
 		sigaddset(&ss, fatalsigs[i]);
-	for (i = 0; i < sizeof(initsigs) / sizeof(initsigs[0]); i++)
+	for (i = 0; i < ASIZE(initsigs); i++)
 		sigaddset(&ss, initsigs[i]);
 	sigprocmask(SIG_BLOCK, &ss, NULL);
 
@@ -640,6 +669,194 @@ out:
 }
 #endif /* !TCONFIG_BCMARM */
 
+#ifdef TCONFIG_AC5300
+static int wlshutdown_ethx_rtac5300(void)
+{
+	int dirty = 0;
+	int debug_wlx_shdown = nvram_get_int("debug_wlx_shdown");
+	int i;
+	char buffer[32];
+	char tmp[64];
+
+	/* check eth1 - shutdown ? */
+	if (debug_wlx_shdown & 0x01) {
+		/* 1 - remove devpath */
+		nvram_unset("devpath0");
+
+		/* 2 - check bridges and remove eth1 radio from the interface list */
+		for (i = 0; i < BRIDGE_COUNT; i++) {
+			memset(buffer, 0, sizeof(buffer));
+			snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifname" : "lan%d_ifname"), i);
+			if (strcmp(nvram_safe_get(buffer), "") != 0) { /* check brX */
+				memset(buffer, 0, sizeof(buffer));
+				memset(tmp, 0, sizeof(tmp));
+				snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifnames" : "lan%d_ifnames"), i);
+				snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get(buffer));
+
+				if (!remove_from_list("eth1", tmp, sizeof(tmp))) {
+					nvram_set(buffer, tmp); /* save lanX_ifnames back to nvram without eth1 interface */
+					break;
+				}
+
+			}
+		}
+
+		/* 3 - adjust nvram wl_ifnames and remove eth1 radio from the interface list */
+		memset(tmp, 0, sizeof(tmp));
+		snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("wl_ifnames"));
+		remove_from_list("eth1", tmp, sizeof(tmp));
+		nvram_set("wl_ifnames", tmp); /* save wl_ifnames back to nvram without eth1 interface */
+
+		/* clear! */
+		nvram_set("wl_ifname", "");
+		nvram_set("wl0_ifname", "");
+	}
+	else {
+		/* check if we have the default setup in place */
+		if (nvram_match("devpath0", "pcie/1/3/")) {
+			/* default path */
+			dirty |= check_nv("wl0_ifname", "eth1");
+		}
+		else { /* bring back default setup */
+			/* set devpath */
+			nvram_set("devpath0", "pcie/1/3/");
+
+			memset(tmp, 0, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("lan_ifnames"));
+			add_to_list("eth1", tmp, sizeof(tmp));
+			/* Add wireless interface eth1 back to br0 (default) */
+			nvram_set("lan_ifnames", tmp);
+
+			memset(tmp, 0, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("wl_ifnames"));
+			add_to_list("eth1", tmp, sizeof(tmp));
+			nvram_set("wl_ifnames", tmp); /* save wl_ifnames */
+
+			nvram_set("wl_ifname", "eth1");
+			nvram_set("wl0_ifname", "eth1");
+			dirty = 1; /* save critical or important values and prepare for nv commit & reboot */
+		}
+	}
+
+	/* check eth2 - shutdown ? */
+	if (debug_wlx_shdown & 0x02) {
+		/* 1 - remove devpath */
+		nvram_unset("devpath1");
+
+		/* 2 - check bridges and remove eth2 radio from the interface list */
+		for (i = 0; i < BRIDGE_COUNT; i++) {
+			memset(buffer, 0, sizeof(buffer));
+			snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifname" : "lan%d_ifname"), i);
+			if (strcmp(nvram_safe_get(buffer), "") != 0) { /* check brX */
+				memset(buffer, 0, sizeof(buffer));
+				memset(tmp, 0, sizeof(tmp));
+				snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifnames" : "lan%d_ifnames"), i);
+				snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get(buffer));
+
+				if (!remove_from_list("eth2", tmp, sizeof(tmp))) {
+					nvram_set(buffer, tmp); /* save lanX_ifnames back to nvram without eth2 interface */
+					break;
+				}
+
+			}
+		}
+
+		/* 3 - adjust nvram wl_ifnames and remove eth2 radio from the interface list */
+		memset(tmp, 0, sizeof(tmp));
+		snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("wl_ifnames"));
+		remove_from_list("eth2", tmp, sizeof(tmp));
+		nvram_set("wl_ifnames", tmp); /* save wl_ifnames back to nvram without eth2 interface */
+
+		/* clear! */
+		nvram_set("wl1_ifname", "");
+	}
+	else {
+		/* check if we have the default setup in place */
+		if (nvram_match("devpath1", "pcie/1/4/")) {
+			/* default path */
+			dirty |= check_nv("wl1_ifname", "eth2");
+		}
+		else { /* bring back default setup */
+			/* set devpath */
+			nvram_set("devpath1", "pcie/1/4/");
+
+			memset(tmp, 0, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("lan_ifnames"));
+			add_to_list("eth2", tmp, sizeof(tmp));
+			/* Add wireless interface eth2 back to br0 (default) */
+			nvram_set("lan_ifnames", tmp);
+
+			memset(tmp, 0, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("wl_ifnames"));
+			add_to_list("eth2", tmp, sizeof(tmp));
+			nvram_set("wl_ifnames", tmp); /* save wl_ifnames */
+
+			nvram_set("wl1_ifname", "eth2");
+			dirty = 1; /* save critical or important values and prepare for nv commit & reboot */
+		}
+	}
+
+	/* check eth3 - shutdown ? */
+	if (debug_wlx_shdown & 0x04) {
+		/* 1 - remove devpath */
+		nvram_unset("devpath2");
+
+		/* 2 - check bridges and remove eth3 radio from the interface list */
+		for (i = 0; i < BRIDGE_COUNT; i++) {
+			memset(buffer, 0, sizeof(buffer));
+			snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifname" : "lan%d_ifname"), i);
+			if (strcmp(nvram_safe_get(buffer), "") != 0) { /* check brX */
+				memset(buffer, 0, sizeof(buffer));
+				memset(tmp, 0, sizeof(tmp));
+				snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifnames" : "lan%d_ifnames"), i);
+				snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get(buffer));
+
+				if (!remove_from_list("eth3", tmp, sizeof(tmp))) {
+					nvram_set(buffer, tmp); /* save lanX_ifnames back to nvram without eth3 interface */
+					break;
+				}
+
+			}
+		}
+
+		/* 3 - adjust nvram wl_ifnames and remove eth3 radio from the interface list */
+		memset(tmp, 0, sizeof(tmp));
+		snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("wl_ifnames"));
+		remove_from_list("eth3", tmp, sizeof(tmp));
+		nvram_set("wl_ifnames", tmp); /* save wl_ifnames back to nvram without eth3 interface */
+
+		/* clear! */
+		nvram_set("wl2_ifname", "");
+	}
+	else {
+		/* check if we have the default setup in place */
+		if (nvram_match("devpath2", "pcie/2/1/")) {
+			/* default path */
+			dirty |= check_nv("wl2_ifname", "eth3");
+		}
+		else { /* bring back default setup */
+			/* set devpath */
+			nvram_set("devpath2", "pcie/2/1/");
+
+			memset(tmp, 0, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("lan_ifnames"));
+			add_to_list("eth3", tmp, sizeof(tmp));
+			/* Add wireless interface eth3 back to br0 (default) */
+			nvram_set("lan_ifnames", tmp);
+
+			memset(tmp, 0, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "%s", nvram_safe_get("wl_ifnames"));
+			add_to_list("eth3", tmp, sizeof(tmp));
+			nvram_set("wl_ifnames", tmp); /* save wl_ifnames */
+
+			nvram_set("wl2_ifname", "eth3");
+			dirty = 1; /* save critical or important values and prepare for nv commit & reboot */
+		}
+	}
+
+	return dirty;
+}
+#endif /* TCONFIG_AC5300 */
 
 static void init_lan_hwaddr(void)
 {
@@ -965,6 +1182,7 @@ static int init_vlan_ports(void)
 	case MODEL_R6700v3:
 	case MODEL_R6900:
 	case MODEL_R7000:
+	case MODEL_EX7000:
 	case MODEL_XR300:
 	case MODEL_RTN18U:
 	case MODEL_RTAC66U_B1: /* also for RT-N66U_C1 and RT-AC1750_B1 */
@@ -1037,7 +1255,6 @@ static void check_bootnv(void)
 	int hardware;
 	char mac[18];
 #endif
-
 	model = get_model();
 	dirty = check_nv("wl0_leddc", "0x640000") | check_nv("wl1_leddc", "0x640000");
 
@@ -1555,6 +1772,7 @@ static void check_bootnv(void)
 	case MODEL_AC1450:
 	case MODEL_R6900:
 	case MODEL_R7000:
+	case MODEL_EX7000:
 	case MODEL_R6700v1:
 	case MODEL_R6400:
 	case MODEL_R6200v2:
@@ -1613,9 +1831,8 @@ static void check_bootnv(void)
 		dirty |= check_nv("rgmii_port", "5"); /* RGMII_BRCM5301X */
 		dirty |= check_nv("vlan1hwname", "et1");
 		dirty |= check_nv("vlan2hwname", "et1");
-		dirty |= check_nv("wl0_ifname", "eth1");
-		dirty |= check_nv("wl1_ifname", "eth2");
-		dirty |= check_nv("wl2_ifname", "eth3");
+		/* check if user wants to shutdown wl radios (for ex. broken ones) */
+		dirty |= wlshutdown_ethx_rtac5300();
 		break;
 #endif
 	case MODEL_R8000:
@@ -2674,6 +2891,10 @@ static int init_nvram(void)
 			nvram_set("wl_ifname", "eth1");
 			nvram_set("wl0_ifname", "eth1");
 			nvram_set("sb/1/ledbh5", "2"); /* WL_LED_ACTIVITY; WiFi LED - active HIGH */
+
+			/* adjust and add cfe wifi country settings */
+			nvram_set("sb/1/ccode", "ALL");
+			nvram_set("sb/1/regrev", "0");
 		}
 		break;
 	case MODEL_RTN15U:
@@ -4585,18 +4806,6 @@ static int init_nvram(void)
 			nvram_set("0:macaddr", s);			/* fix WL mac for 5G eth2 */
 			nvram_set("wl1_hwaddr", s);
 
-			nvram_set("boardflags", "0x710");
-			nvram_set("boardflags2", "0x1000");
-
-			/* set QTD params in nvram for USB wl radio IC */
-			nvram_set("ehciirqt", "1");
-			nvram_set("qtdc_pid", "48407");
-			nvram_set("qtdc_vid", "2652");
-			nvram_set("qtdc0_ep", "4");
-			nvram_set("qtdc0_sz", "0");
-			nvram_set("qtdc1_ep", "18");
-			nvram_set("qtdc1_sz", "10");
-
 			/* wifi settings/channels */
 			nvram_set("wl0_nbw", "20");
 			nvram_set("wl0_nbw_cap", "0");
@@ -4608,163 +4817,10 @@ static int init_nvram(void)
 			nvram_set("wl1_nctrlsb", "lower");
 		}
 
-		/* Set Key Parameters for Wireless Interfaces: SB (Southbridge) and PCI, to configure HW (as Netgear intends) */
-		struct nvram_tuple wndr3400v2_sb_1_params[] = {
-			{ "aa2g", "0x3", 0 },
-			{ "ag0", "0x2", 0 },
-			{ "ag1", "0x2", 0 },
-			{ "ag2", "0x2", 0 },
-			{ "ag3", "0xff", 0 },
-			{ "antswctl2g", "0x1", 0 },
-			{ "antswitch", "0x0", 0 },
-			{ "boardflags2", "0x1000", 0 },
-			{ "boardflags", "0x710", 0 },
-			{ "bw40po", "0x0", 0 },
-			{ "bwduppo", "0x0", 0 },
-			{ "bxa2g", "0x3", 0 },
-			{ "cck2gpo", "0x0", 0 },
-			{ "ccode", "Q1", 0 },
-			{ "cddpo", "0x0", 0 },
-			{ "devid", "0x4329", 0 },
-			{ "extpagain2g", "0x2", 0 },
-			{ "itt2ga0", "0x20", 0 },
-			{ "itt2ga1", "0x20", 0 },
-			{ "ledbh0", "11", 0 },
-			{ "ledbh1", "11", 0 },
-			{ "ledbh2", "11", 0 },
-			{ "ledbh3", "11", 0 },
-			{ "leddc", "0xffff", 0 },
-			{ "maxp2ga0", "0x50", 0 },
-			{ "maxp2ga1", "0x50", 0 },
-			{ "mcs2gpo0", "0x0", 0 },
-			{ "mcs2gpo1", "0x6410", 0 },
-			{ "mcs2gpo2", "0x0000", 0 },
-			{ "mcs2gpo3", "0x6410", 0 },
-			{ "mcs2gpo4", "0x0000", 0 },
-			{ "mcs2gpo5", "0x6410", 0 },
-			{ "mcs2gpo6", "0x0000", 0 },
-			{ "mcs2gpo7", "0x6410", 0 },
-			{ "ofdm2gpo", "0x41000000", 0 },
-			{ "opo", "0x0", 0 },
-			{ "pa2gw0a0", "0xFF34", 0 },
-			{ "pa2gw0a1", "0xFE3B", 0 },
-			{ "pa2gw1a0", "0x1542", 0 },
-			{ "pa2gw1a1", "0x1493", 0 },
-			{ "pa2gw2a0", "0xFB21", 0 },
-			{ "pa2gw2a1", "0xFB21", 0 },
-			{ "pdetrange2g", "0x2", 0 },
-			{ "regrev", "0", 0 },
-			{ "rssisav2g", "0x7", 0 },
-			{ "rssismc2g", "0xf", 0 },
-			{ "rssismf2g", "0xf", 0 },
-			{ "rxchain", "0x3", 0 },
-			{ "rxpo2g", "0xff", 0 },
-			{ "sromrev", "8", 0 },
-			{ "stbcpo", "0x0", 0 },
-			{ "temps_hysteresis", "5", 0 },
-			{ "temps_period", "5", 0 },
-			{ "tempthresh", "120", 0 },
-			{ "tri2g", "0xff", 0 },
-			{ "triso2g", "0x3", 0 },
-			{ "tssipos2g", "0x1", 0 },
-			{ "txchain", "0x3", 0 },
-			{ "txq_len", "1024", 0 },
-			{ 0, 0, 0 }
-		};
-
-		struct nvram_tuple wndr3400v2_pci_1_1_params[] = {
-			{ "ag0", "2", 0 },
-			{ "ag1", "2", 0 },
-			{ "antswctl2g", "0", 0 },
-			{ "antswctl5g", "0", 0 },
-			{ "antswitch", "0", 0 },
-			{ "bw405ghpo/bw405glpo/bw405gpo/bw402gpo", "0x2", 0 },
-			{ "bw40po", "0", 0 },
-			{ "bwduppo", "0", 0 },
-			{ "ccode", "0", 0 },
-			{ "cdd5ghpo/cdd5glpo/cdd5gpo/cdd2gpo", "0x0", 0 },
-			{ "cddpo", "0", 0 },
-			{ "devid", "0x432d", 0 },
-			{ "extpagain5g", "2", 0 },
-			{ "itt5ga0", "0x3e", 0 },
-			{ "itt5ga1", "0x3e", 0 },
-			{ "maxp5ga0", "0x4E", 0 },
-			{ "maxp5ga1", "0x4E", 0 },
-			{ "maxp5gha0", "0x4E", 0 },
-			{ "maxp5gha1", "0x4E", 0 },
-			{ "maxp5gla0", "0x3E", 0 },
-			{ "maxp5gla1", "0x3E", 0 },
-			{ "mcs5ghpo0", "0x0000", 0 },
-			{ "mcs5ghpo1", "0xa820", 0 },
-			{ "mcs5ghpo2", "0x2222", 0 },
-			{ "mcs5ghpo3", "0xa822", 0 },
-			{ "mcs5ghpo4", "0x0000", 0 },
-			{ "mcs5ghpo5", "0xa820", 0 },
-			{ "mcs5ghpo6", "0x2222", 0 },
-			{ "mcs5ghpo7", "0xa822", 0 },
-			{ "mcs5glpo0", "0x0000", 0 },
-			{ "mcs5glpo1", "0x2000", 0 },
-			{ "mcs5glpo2", "0x0000", 0 },
-			{ "mcs5glpo3", "0x2000", 0 },
-			{ "mcs5glpo4", "0x0000", 0 },
-			{ "mcs5glpo5", "0x2000", 0 },
-			{ "mcs5glpo6", "0x0000", 0 },
-			{ "mcs5glpo7", "0x2000", 0 },
-			{ "mcs5gpo0", "0x0000", 0 },
-			{ "mcs5gpo1", "0xa820", 0 },
-			{ "mcs5gpo2", "0x2222", 0 },
-			{ "mcs5gpo3", "0xa822", 0 },
-			{ "mcs5gpo4", "0x0000", 0 },
-			{ "mcs5gpo5", "0xa820", 0 },
-			{ "mcs5gpo6", "0x2222", 0 },
-			{ "mcs5gpo7", "0xa822", 0 },
-			{ "ofdm5ghpo0", "0x0000", 0 },
-			{ "ofdm5ghpo1", "0x2000", 0 },
-			{ "ofdm5glpo0", "0x0000", 0 },
-			{ "ofdm5glpo1", "0x0000", 0 },
-			{ "ofdm5gpo0", "0x0000", 0 },
-			{ "ofdm5gpo1", "0x2000", 0 },
-			{ "pa5ghw0a0", "0xfeda", 0 },
-			{ "pa5ghw0a1", "0xff18", 0 },
-			{ "pa5ghw1a0", "0x1612", 0 },
-			{ "pa5ghw1a1", "0x1661", 0 },
-			{ "pa5ghw2a0", "0xfabe", 0 },
-			{ "pa5ghw2a1", "0xfafe", 0 },
-			{ "pa5glw0a0", "0xFEF9", 0 },
-			{ "pa5glw0a1", "0xFF31", 0 },
-			{ "pa5glw1a0", "0x154B", 0 },
-			{ "pa5glw1a1", "0x1517", 0 },
-			{ "pa5glw2a0", "0xFAFD", 0 },
-			{ "pa5glw2a1", "0xFB2F", 0 },
-			{ "pa5gw0a0", "0xFEF9", 0 },
-			{ "pa5gw0a1", "0xff31", 0 },
-			{ "pa5gw1a0", "0x164B", 0 },
-			{ "pa5gw1a1", "0x1697", 0 },
-			{ "pa5gw2a0", "0xFADD", 0 },
-			{ "pa5gw2a1", "0xfb08", 0 },
-			{ "pdetrange5g", "4", 0 },
-			{ "regrev", "0", 0 },
-			{ "rxchain", "3", 0 },
-			{ "sromrev", "8", 0 },
-			{ "stbc5ghpo/stbc5glpo/stbc5gpo/stbc2gpo", "0x0", 0 },
-			{ "stbcpo", "0", 0 },
-			{ "triso5g", "3", 0 },
-			{ "tssipos5g", "1", 0 },
-			{ "txchain", "3", 0 },
-			{ "wdup405ghpo/wdup405glpo/wdup405gpo/wdup402gpo", "0x0", 0 },
-			{ 0, 0, 0 }
-		};
-
-		set_defaults(wndr3400v2_sb_1_params, "sb/1/%s");
-		set_defaults(wndr3400v2_pci_1_1_params, "pci/1/1/%s");
-
 		/* WNDR3400v2 adjust default values for wl_txq_thresh, et_txq_thresh and wl_rpcq_rxthresh (--> explicitly for WiFi modules) */
 		nvram_set("et_txq_thresh", "512");
 		nvram_set("wl_txq_thresh", "512");
 		nvram_set("wl_rpcq_rxthresh", "512");
-
-		nvram_set("wl0_txq_thresh", "512");
-		nvram_set("wl0_rpcq_rxthresh", "512");
 
 		nvram_set("wl1_txq_thresh", "512");
 		nvram_set("wl1_rpcq_rxthresh", "512");
@@ -4806,18 +4862,6 @@ static int init_nvram(void)
 			nvram_set("0:macaddr", s);			/* fix WL mac for 5G eth2 */
 			nvram_set("wl1_hwaddr", s);
 
-			nvram_set("boardflags", "0x80001710");
-			nvram_set("boardflags2", "0x1000");
-
-			/* set QTD params in nvram for USB wl radio IC */
-			nvram_set("ehciirqt", "1");
-			nvram_set("qtdc_pid", "48407");
-			nvram_set("qtdc_vid", "2652");
-			nvram_set("qtdc0_ep", "4");
-			nvram_set("qtdc0_sz", "0");
-			nvram_set("qtdc1_ep", "18");
-			nvram_set("qtdc1_sz", "10");
-
 			/* wifi settings/channels */
 			nvram_set("wl0_nbw", "20");
 			nvram_set("wl0_nbw_cap", "0");
@@ -4829,164 +4873,10 @@ static int init_nvram(void)
 			nvram_set("wl1_nctrlsb", "lower");
 		}
 
-		/* Set Key Parameters for Wireless Interfaces: SB (Southbridge) and PCI, to configure HW (as Netgear intends) */
-		struct nvram_tuple wndr3400v3_sb_1_params[] = {
-			{ "aa2g", "0x3", 0 },
-			{ "ag0", "0x0", 0 },
-			{ "ag1", "0x0", 0 },
-			{ "ag2", "0x2", 0 },
-			{ "ag3", "0xff", 0 },
-			{ "antswctl2g", "0x1", 0 },
-			{ "antswitch", "0x0", 0 },
-			{ "boardflags", "0x80001710", 0 },
-			{ "boardflags2", "0x1000", 0 },
-			{ "bw40po", "0x0", 0 },
-			{ "bwduppo", "0x0", 0 },
-			{ "bxa2g", "0x3", 0 },
-			{ "cck2gpo", "0x0", 0 },
-			{ "ccode", "Q1", 0 },
-			{ "cddpo", "0x0", 0 },
-			{ "devid", "0x4329", 0 },
-			{ "elna2g", "2", 0 },
-			{ "extpagain2g", "0x2", 0 },
-			{ "itt2ga0", "0x20", 0 },
-			{ "itt2ga1", "0x20", 0 },
-			{ "ledbh0", "11", 0 },
-			{ "ledbh1", "11", 0 },
-			{ "ledbh2", "11", 0 },
-			{ "ledbh3", "11", 0 },
-			{ "leddc", "0xffff", 0 },
-			{ "maxp2ga0", "0x4C", 0 },
-			{ "maxp2ga1", "0x4C", 0 },
-			{ "mcs2gpo0", "0x0", 0 },
-			{ "mcs2gpo1", "0x5300", 0 },
-			{ "mcs2gpo2", "0x0", 0 },
-			{ "mcs2gpo3", "0x5300", 0 },
-			{ "mcs2gpo4", "0x6666", 0 },
-			{ "mcs2gpo5", "0x6666", 0 },
-			{ "mcs2gpo6", "0x6666", 0 },
-			{ "mcs2gpo7", "0x6666", 0 },
-			{ "ofdm2gpo", "0x30000000", 0 },
-			{ "opo", "0x0", 0 },
-			{ "pa2gw0a0", "0xFEE2", 0 },
-			{ "pa2gw0a1", "0xFEE4", 0 },
-			{ "pa2gw1a0", "0x150F", 0 },
-			{ "pa2gw1a1", "0x141C", 0 },
-			{ "pa2gw2a0", "0xFACA", 0 },
-			{ "pa2gw2a1", "0xFAEB", 0 },
-			{ "pdetrange2g", "0x2", 0 },
-			{ "regrev", "50", 0 },
-			{ "rssisav2g", "0x7", 0 },
-			{ "rssismc2g", "0xf", 0 },
-			{ "rssismf2g", "0xf", 0 },
-			{ "rxchain", "0x3", 0 },
-			{ "rxpo2g", "0xff", 0 },
-			{ "sromrev", "8", 0 },
-			{ "stbcpo", "0x0", 0 },
-			{ "temps_hysteresis", "5", 0 },
-			{ "temps_period", "5", 0 },
-			{ "tempthresh", "120", 0 },
-			{ "tri2g", "0xff", 0 },
-			{ "triso2g", "0x3", 0 },
-			{ "tssipos2g", "0x1", 0 },
-			{ "txchain", "0x3", 0 },
-			{ "txq_len", "1024", 0 },
-			{ 0, 0, 0 }
-		};
-
-		struct nvram_tuple wndr3400v3_pci_1_1_params[] = {
-			{ "ag0", "0x1", 0 },
-			{ "ag1", "0x1", 0 },
-			{ "antswctl2g", "0", 0 },
-			{ "antswctl5g", "0", 0 },
-			{ "antswitch", "0", 0 },
-			{ "bw405ghpo/bw405glpo/bw405gpo/bw402gpo", "0x2", 0 },
-			{ "bw40po", "0", 0 },
-			{ "bwduppo", "0", 0 },
-			{ "ccode", "0", 0 },
-			{ "cdd5ghpo/cdd5glpo/cdd5gpo/cdd2gpo", "0x0", 0 },
-			{ "cddpo", "0", 0 },
-			{ "devid", "0x432d", 0 },
-			{ "extpagain5g", "2", 0 },
-			{ "itt5ga0", "0x3e", 0 },
-			{ "itt5ga1", "0x3e", 0 },
-			{ "maxp5ga0", "0x4E", 0 },
-			{ "maxp5ga1", "0x4E", 0 },
-			{ "maxp5gha0", "0x4E", 0 },
-			{ "maxp5gha1", "0x4E", 0 },
-			{ "maxp5gla0", "0x3E", 0 },
-			{ "maxp5gla1", "0x3E", 0 },
-			{ "mcs5ghpo0", "0x0000", 0 },
-			{ "mcs5ghpo1", "0xa820", 0 },
-			{ "mcs5ghpo2", "0x2222", 0 },
-			{ "mcs5ghpo3", "0xa822", 0 },
-			{ "mcs5ghpo4", "0x0000", 0 },
-			{ "mcs5ghpo5", "0xa820", 0 },
-			{ "mcs5ghpo6", "0x2222", 0 },
-			{ "mcs5ghpo7", "0xa822", 0 },
-			{ "mcs5glpo0", "0x0000", 0 },
-			{ "mcs5glpo1", "0x2000", 0 },
-			{ "mcs5glpo2", "0x0000", 0 },
-			{ "mcs5glpo3", "0x2000", 0 },
-			{ "mcs5glpo4", "0x0000", 0 },
-			{ "mcs5glpo5", "0x2000", 0 },
-			{ "mcs5glpo6", "0x0000", 0 },
-			{ "mcs5glpo7", "0x2000", 0 },
-			{ "mcs5gpo0", "0x0000", 0 },
-			{ "mcs5gpo1", "0xa820", 0 },
-			{ "mcs5gpo2", "0x2222", 0 },
-			{ "mcs5gpo3", "0xa822", 0 },
-			{ "mcs5gpo4", "0x0000", 0 },
-			{ "mcs5gpo5", "0xa820", 0 },
-			{ "mcs5gpo6", "0x2222", 0 },
-			{ "mcs5gpo7", "0xa822", 0 },
-			{ "ofdm5ghpo0", "0x0000", 0 },
-			{ "ofdm5ghpo1", "0x2000", 0 },
-			{ "ofdm5glpo0", "0x0000", 0 },
-			{ "ofdm5glpo1", "0x0000", 0 },
-			{ "ofdm5gpo0", "0x0000", 0 },
-			{ "ofdm5gpo1", "0x2000", 0 },
-			{ "pa5ghw0a0", "0xfeda", 0 },
-			{ "pa5ghw0a1", "0xff18", 0 },
-			{ "pa5ghw1a0", "0x1612", 0 },
-			{ "pa5ghw1a1", "0x1661", 0 },
-			{ "pa5ghw2a0", "0xfabe", 0 },
-			{ "pa5ghw2a1", "0xfafe", 0 },
-			{ "pa5glw0a0", "0xFEF9", 0 },
-			{ "pa5glw0a1", "0xFF31", 0 },
-			{ "pa5glw1a0", "0x154B", 0 },
-			{ "pa5glw1a1", "0x1517", 0 },
-			{ "pa5glw2a0", "0xFAFD", 0 },
-			{ "pa5glw2a1", "0xFB2F", 0 },
-			{ "pa5gw0a0", "0xFEF9", 0 },
-			{ "pa5gw0a1", "0xff31", 0 },
-			{ "pa5gw1a0", "0x164B", 0 },
-			{ "pa5gw1a1", "0x1697", 0 },
-			{ "pa5gw2a0", "0xFADD", 0 },
-			{ "pa5gw2a1", "0xfb08", 0 },
-			{ "pdetrange5g", "4", 0 },
-			{ "regrev", "0", 0 },
-			{ "rxchain", "3", 0 },
-			{ "sromrev", "8", 0 },
-			{ "stbc5ghpo/stbc5glpo/stbc5gpo/stbc2gpo", "0x0", 0 },
-			{ "stbcpo", "0", 0 },
-			{ "triso5g", "3", 0 },
-			{ "tssipos5g", "1", 0 },
-			{ "txchain", "3", 0 },
-			{ "wdup405ghpo/wdup405glpo/wdup405gpo/wdup402gpo", "0x0", 0 },
-			{ 0, 0, 0 }
-		};
-
-		set_defaults(wndr3400v3_sb_1_params, "sb/1/%s");
-		set_defaults(wndr3400v3_pci_1_1_params, "pci/1/1/%s");
-
 		/* WNDR3400v3 adjust default values for wl_txq_thresh, et_txq_thresh and wl_rpcq_rxthresh (--> explicitly for WiFi modules) */
 		nvram_set("et_txq_thresh", "512");
 		nvram_set("wl_txq_thresh", "512");
 		nvram_set("wl_rpcq_rxthresh", "512");
-
-		nvram_set("wl0_txq_thresh", "512");
-		nvram_set("wl0_rpcq_rxthresh", "512");
 
 		nvram_set("wl1_txq_thresh", "512");
 		nvram_set("wl1_rpcq_rxthresh", "512");
@@ -8030,6 +7920,281 @@ static int init_nvram(void)
 		}
 		if (!nvram_get_int("caldata_ready")) { /* last step: set router specific cal data if not yet applied */
 			setcaldata();
+			nvram_set("caldata_ready", "1");
+		}
+		break;
+	case MODEL_EX7000:
+		mfr = "Netgear";
+		name = "EX7000";
+		features = SUP_SES | SUP_80211N | SUP_1000ET | SUP_80211AC;
+#ifdef TCONFIG_USB
+		nvram_set("usb_uhci", "-1");
+#endif
+		if (!nvram_match("t_fix1", (char *)name)) {
+			nvram_set("vlan1hwname", "et0");
+			nvram_set("vlan2hwname", "et0");
+			nvram_set("lan_ifname", "br0");
+			nvram_set("landevs", "vlan1 wl0 wl1");
+			nvram_set("lan_ifnames", "vlan1 eth1 eth2");
+			nvram_set("wan_ifnames", "vlan2");
+			nvram_set("wan_ifnameX", "vlan2");
+			nvram_set("wandevs", "vlan2");
+			nvram_set("wl_ifnames", "eth1 eth2");
+			nvram_set("wl_ifname", "eth1");
+			nvram_set("wl0_ifname", "eth1");
+			nvram_set("wl1_ifname", "eth2");
+			nvram_set("wl0_vifnames", "wl0.1 wl0.2 wl0.3");
+			nvram_set("wl1_vifnames", "wl1.1 wl1.2 wl1.3");
+
+			/* disable second *fake* LAN interface - just in case! */
+			nvram_unset("et1macaddr");
+
+			/* fix MAC addresses */
+			strlcpy(s, nvram_safe_get("et0macaddr"), sizeof(s));	/* get et0 MAC address for LAN */
+			inc_mac(s, +2, sizeof(s));				/* MAC + 1 will be for WAN */
+			nvram_set("0:macaddr", s);				/* fix WL mac for 2,4G (do not use the same MAC address like for LAN) */
+			nvram_set("wl0_hwaddr", s);
+			inc_mac(s, +4, sizeof(s));				/* do not overlap with VIFs */
+			nvram_set("1:macaddr", s);				/* fix WL mac for 5G */
+			nvram_set("wl1_hwaddr", s);
+
+			/* usb3.0 settings */
+			nvram_set("usb_usb3", "1");
+			nvram_set("xhci_ports", "1-1");
+			nvram_set("ehci_ports", "2-1 2-2");
+			nvram_set("ohci_ports", "3-1 3-2");
+
+			/* misc settings */
+			nvram_set("boot_wait", "on");
+			nvram_set("wait_time", "3");
+
+			/* wifi settings/channels */
+			nvram_set("wl0_bw_cap","3");
+			nvram_set("wl0_chanspec","6u");
+			nvram_set("wl0_channel","6");
+			nvram_set("wl0_nbw","40");
+			nvram_set("wl0_nctrlsb", "upper");
+			nvram_set("wl1_bw_cap", "7");
+			nvram_set("wl1_chanspec", "36/80");
+			nvram_set("wl1_channel", "36");
+			nvram_set("wl1_nbw","80");
+			nvram_set("wl1_nbw_cap","3");
+			nvram_set("wl1_nctrlsb", "lower");
+
+			/* wifi country settings */
+			nvram_set("0:regrev", "12");
+			nvram_set("1:regrev", "12");
+			nvram_set("0:ccode", "SG");
+			nvram_set("1:ccode", "SG");
+
+			/* set devpath (device path) for wl driver */
+			nvram_set("devpath0", "pci/1/1/");
+			nvram_set("devpath1", "pci/2/1/");
+
+			struct nvram_tuple ex7000_0_params[] = {
+				/* 2.4 GHz defaults */
+				{ "aa2g", "7" , 0 },
+				{ "agbg0", "0x0" , 0 },
+				{ "agbg1", "0x0" , 0 },
+				{ "agbg2", "0x0" , 0 },
+				{ "antswitch", "0" , 0 },
+				{ "boardflags2", "0x2" , 0 },
+				{ "boardflags3", "0x4000001" , 0 },
+				{ "boardflags", "0x1000" , 0 },
+				{ "boardrev", "0x1421" , 0 },
+				{ "boardvendor", "0x14e4" , 0 },
+				{ "cckbw20ul2gpo", "0" , 0 },
+				{ "cckbw202gpo", "0" , 0 },
+				//{ "ccode", "E0" , 0 }, /* use FT default SG 12 */
+				{ "devid", "0x43a1" , 0 },
+				{ "dot11agduphrpo", "0" , 0 },
+				{ "dot11agduplrpo", "0" , 0 },
+				{ "dot11agofdmhrbw202gpo", "0xAECA" , 0 },
+				{ "epagain2g", "0" , 0 },
+				{ "femctrl", "6" , 0 },
+				{ "gainctrlsph", "0" , 0 },
+				{ "ledbh0", "11" , 0 },
+				{ "ledbh1", "11" , 0 },
+				{ "ledbh2", "11" , 0 },
+				{ "ledbh3", "11" , 0 },
+				{ "maxp2ga0", "106" , 0 },
+				{ "maxp2ga1", "106" , 0 },
+				{ "maxp2ga2", "106" , 0 },
+				{ "mcsbw202gpo", "0xBA76A600" , 0 },
+				{ "mcsbw402gpo", "0xBA76A600" , 0 },
+				{ "ofdmlrbw202gpo", "0x6000" , 0 },
+				{ "pa2ga0", "0xFF2C,0x1B59,0xFCAF" , 0 },
+				{ "pa2ga1", "0xFF31,0x1B9A,0xFC9D" , 0 },
+				{ "pa2ga2", "0xFF1F,0x1A53,0xFCB1" , 0 },
+				{ "papdcap2g", "0" , 0 },
+				{ "pdgain2g", "21" , 0 },
+				{ "pdoffset2g40ma0", "15" , 0 },
+				{ "pdoffset2g40ma1", "15" , 0 },
+				{ "pdoffset2g40ma2", "15" , 0 },
+				{ "pdoffset2g40mvalid", "1" , 0 },
+				{ "pdoffset40ma0", "0" , 0 },
+				{ "pdoffset40ma1", "0" , 0 },
+				{ "pdoffset40ma2", "0" , 0 },
+				{ "pdoffset80ma0", "0" , 0 },
+				{ "pdoffset80ma1", "0" , 0 },
+				{ "pdoffset80ma2", "0" , 0 },
+				{ "phycal_tempdelta", "15" , 0 },
+				{ "pwr_scale_1db", "1" , 0 },
+				{ "rawtempsense", "0x1ff" , 0 },
+				//{ "regrev", "39" , 0 }, /* use FT default SG 12 */
+				//{ "rpcal2g", "0xfa02" , 0 }, /* EX7000 value from board_data */
+				{ "rpcal2g", "0x3ef", 0 }, /* use R7000 rpcal2g default - will be changed with setcaldata() */
+				{ "rxchain", "7" , 0 },
+				{ "rxgainerr2ga0", "63" , 0 }, /* R7000 and EX7000 default value (same at board_data) - will be changed with setrxgainerrdata() */
+				{ "rxgainerr2ga1", "31" , 0 }, /* R7000 and EX7000 default value (same at board_data) - will be changed with setrxgainerrdata() */
+				{ "rxgainerr2ga2", "31" , 0 }, /* R7000 and EX7000 default value (same at board_data) - will be changed with setrxgainerrdata() */
+				{ "rxgains2gelnagaina0", "3" , 0 },
+				{ "rxgains2gelnagaina1", "3" , 0 },
+				{ "rxgains2gelnagaina2", "3" , 0 },
+				{ "rxgains2gtrelnabypa0", "1" , 0 },
+				{ "rxgains2gtrelnabypa1", "1" , 0 },
+				{ "rxgains2gtrelnabypa2", "1" , 0 },
+				{ "rxgains2gtrisoa0", "3" , 0 },
+				{ "rxgains2gtrisoa1", "3" , 0 },
+				{ "rxgains2gtrisoa2", "3" , 0 },
+				{ "sromrev", "11" , 0 },
+				{ "tempcorrx", "0x3f" , 0 },
+				{ "tempoffset", "255" , 0 },
+				{ "temps_hysteresis", "5" , 0 },
+				{ "temps_period", "5" , 0 },
+				{ "tempsense_option", "0x3" , 0 },
+				{ "tempsense_slope", "0xff" , 0 },
+				{ "tempthresh", "120" , 0 },
+				{ "tssiposslope2g", "1" , 0 },
+				{ "tworangetssi2g", "0" , 0 },
+				{ "txchain", "7" , 0 },
+				{ "venvid", "0x14e4" , 0 },
+				{ "xtalfreq", "40000" , 0 },
+				{ 0, 0, 0 }
+			};
+
+			struct nvram_tuple ex7000_1_params[] = {
+				/* 5 GHz module defaults */
+				{ "aa5g", "7" , 0 },
+				{ "aga0", "0x0" , 0 },
+				{ "aga1", "0x0" , 0 },
+				{ "aga2", "0x0" , 0 },
+				{ "antswitch", "0" , 0 },
+				{ "boardflags2", "0x2" , 0 },
+				{ "boardflags3", "0x1" , 0 },
+				{ "boardflags", "0x30008000" , 0 },
+				{ "boardrev", "0x1421" , 0 },
+				{ "boardvendor", "0x14e4" , 0 },
+				//{ "ccode", "E0" , 0 }, /* use FT default SG 12 */
+				{ "devid", "0x43a2" , 0 },
+				{ "dot11agduphrpo", "0" , 0 },
+				{ "dot11agduplrpo", "0" , 0 },
+				{ "dot11agofdmhrbw202gpo", "0x8764" , 0 },
+				{ "epagain5g", "0" , 0 },
+				{ "femctrl", "6" , 0 },
+				{ "gainctrlsph", "0" , 0 },
+				{ "ledbh0", "11" , 0 },
+				{ "ledbh1", "11" , 0 },
+				{ "ledbh2", "11" , 0 },
+				{ "ledbh3", "11" , 0 },
+				{ "maxp5ga0", "106,106,106,106" , 0 },
+				{ "maxp5ga1", "106,106,106,106" , 0 },
+				{ "maxp5ga2", "106,106,106,106" , 0 },
+				{ "mcsbw205ghpo", "0xBA768600" , 0 },
+				{ "mcsbw205glpo", "0xBA768600" , 0 },
+				{ "mcsbw205gmpo", "0xBA768600" , 0 },
+				{ "mcsbw405ghpo", "0xBA768600" , 0 },
+				{ "mcsbw405glpo", "0xBA768600" , 0 },
+				{ "mcsbw405gmpo", "0xBA768600" , 0 },
+				{ "mcsbw805ghpo", "0xBA768888" , 0 },
+				{ "mcsbw805glpo", "0xBA768600" , 0 },
+				{ "mcsbw805gmpo", "0xBA768600" , 0 },
+				{ "mcsbw1605ghpo", "0" , 0 },
+				{ "mcsbw1605glpo", "0" , 0 },
+				{ "mcsbw1605gmpo", "0" , 0 },
+				{ "mcslr5ghpo", "0" , 0 },
+				{ "mcslr5glpo", "0" , 0 },
+				{ "mcslr5gmpo", "0" , 0 },
+				{ "pa5ga0", "0xFF45,0x1D51,0xFC9C,0xFF43,0x1C9B,0xFCAA,0xFF47,0x1CE9,0xFC9D,0xFF48,0x1BD6,0xFCC3" , 0 },
+				{ "pa5ga1", "0xFF41,0x1C09,0xFCB2,0xFF49,0x1CFA,0xFCA4,0xFF49,0x1D3F,0xFC95,0xFF48,0x1BD2,0xFCC3" , 0 },
+				{ "pa5ga2", "0xFF24,0x1AC4,0xFCBD,0xFF44,0x1CA2,0xFCA9,0xFF4E,0x1CE6,0xFCB2,0xFF49,0x1B5D,0xFCD2" , 0 },
+				{ "papdcap5g", "0" , 0 },
+				{ "pdgain5g", "4" , 0 },
+				{ "pdoffset40ma0", "0" , 0 },
+				{ "pdoffset40ma1", "0" , 0 },
+				{ "pdoffset40ma2", "0" , 0 },
+				{ "pdoffset80ma0", "0" , 0 },
+				{ "pdoffset80ma1", "0" , 0 },
+				{ "pdoffset80ma2", "0" , 0 },
+				{ "phycal_tempdelta", "15" , 0 },
+				{ "pwr_scale_1db", "1" , 0 },
+				{ "rawtempsense", "0x1ff" , 0 },
+				//{ "regrev", "996" , 0 }, /* use FT default SG 12 */
+				//{ "rpcal5gb0", "0x9568" , 0 }, /* EX7000 value from board_data */
+				//{ "rpcal5gb1", "0x9f6b" , 0 }, /* EX7000 value from board_data */
+				//{ "rpcal5gb2", "0xb176" , 0 }, /* EX7000 value from board_data */
+				//{ "rpcal5gb3", "0xb184" , 0 }, /* EX7000 value from board_data */
+				{ "rpcal5gb0", "0x7005", 0 }, /* use R7000 rpcal5g default - will be changed with setcaldata() */
+				{ "rpcal5gb1", "0x8403", 0 }, /* use R7000 rpcal5g default - will be changed with setcaldata() */
+				{ "rpcal5gb2", "0x6ff9", 0 }, /* use R7000 rpcal5g default - will be changed with setcaldata() */
+				{ "rpcal5gb3", "0x8509", 0 }, /* use R7000 rpcal5g default - will be changed with setcaldata() */
+				{ "rxchain", "7" , 0 },
+				//{ "rxgainerr5ga0", "-9,63,63,-8" , 0 }, /* EX7000 value from board_data */
+				//{ "rxgainerr5ga1", "2,31,31,2" , 0 },   /* EX7000 value from board_data */
+				//{ "rxgainerr5ga2", "0,31,31,-3" , 0 },  /* EX7000 value from board_data */
+				{ "rxgainerr5ga0", "63,63,63,63", 0 }, /* use R7000 rxgainerr5g default - will be changed with setrxgainerrdata() */
+				{ "rxgainerr5ga1", "31,31,31,31", 0 }, /* use R7000 rxgainerr5g default - will be changed with setrxgainerrdata() */
+				{ "rxgainerr5ga2", "31,31,31,31", 0 }, /* use R7000 rxgainerr5g default - will be changed with setrxgainerrdata() */
+				{ "rxgains5gelnagaina0", "3" , 0 },
+				{ "rxgains5gelnagaina1", "3" , 0 },
+				{ "rxgains5gelnagaina2", "3" , 0 },
+				{ "rxgains5ghelnagaina0", "3" , 0 },
+				{ "rxgains5ghelnagaina1", "3" , 0 },
+				{ "rxgains5ghelnagaina2", "3" , 0 },
+				{ "rxgains5ghtrelnabypa0", "1" , 0 },
+				{ "rxgains5ghtrelnabypa1", "1" , 0 },
+				{ "rxgains5ghtrelnabypa2", "1" , 0 },
+				{ "rxgains5ghtrisoa0", "3" , 0 },
+				{ "rxgains5ghtrisoa1", "3" , 0 },
+				{ "rxgains5ghtrisoa2", "3" , 0 },
+				{ "rxgains5gmelnagaina0", "3" , 0 },
+				{ "rxgains5gmelnagaina1", "3" , 0 },
+				{ "rxgains5gmelnagaina2", "3" , 0 },
+				{ "rxgains5gmtrelnabypa0", "1" , 0 },
+				{ "rxgains5gmtrelnabypa1", "1" , 0 },
+				{ "rxgains5gmtrelnabypa2", "1" , 0 },
+				{ "rxgains5gmtrisoa0", "5" , 0 },
+				{ "rxgains5gmtrisoa1", "3" , 0 },
+				{ "rxgains5gmtrisoa2", "3" , 0 },
+				{ "rxgains5gtrelnabypa0", "1" , 0 },
+				{ "rxgains5gtrelnabypa1", "1" , 0 },
+				{ "rxgains5gtrelnabypa2", "1" , 0 },
+				{ "rxgains5gtrisoa0", "3" , 0 },
+				{ "rxgains5gtrisoa1", "3" , 0 },
+				{ "rxgains5gtrisoa2", "3" , 0 },
+				{ "sromrev", "11" , 0 },
+				{ "subband5gver", "0x4" , 0 },
+				{ "tempcorrx", "0x3f" , 0 },
+				{ "tempoffset", "255" , 0 },
+				{ "temps_hysteresis", "5" , 0 },
+				{ "temps_period", "5" , 0 },
+				{ "tempsense_option", "0x3" , 0 },
+				{ "tempsense_slope", "0xff" , 0 },
+				{ "tempthresh", "120" , 0 },
+				{ "tssiposslope5g", "1" , 0 },
+				{ "tworangetssi5g", "0" , 0 },
+				{ "txchain", "7" , 0 },
+				{ "venid", "0x14e4" , 0 },
+				{ "xtalfreq", "40000" , 0 },
+				{ 0, 0, 0 }
+			};
+
+			set_defaults(ex7000_0_params, "0:%s");
+			set_defaults(ex7000_1_params, "1:%s");
+		}
+		if (!nvram_get_int("caldata_ready")) { /* last step: set router specific cal and rxgainerr data if not yet applied */
+			setcaldata();
+			setrxgainerrdata(); 
 			nvram_set("caldata_ready", "1");
 		}
 		break;
@@ -11327,7 +11492,7 @@ static void sysinit(void)
 	f_write_procsysnet("ipv6/conf/default/disable_ipv6", "1");
 #endif
 
-	for (i = 0; i < sizeof(fatalsigs) / sizeof(fatalsigs[0]); i++) {
+	for (i = 0; i < ASIZE(fatalsigs); i++) {
 		signal(fatalsigs[i], handle_fatalsigs);
 	}
 	signal(SIGCHLD, handle_reap);
@@ -11446,7 +11611,7 @@ int init_main(int argc, char *argv[])
 	sysinit();
 
 	sigemptyset(&sigset);
-	for (i = 0; i < sizeof(initsigs) / sizeof(initsigs[0]); i++) {
+	for (i = 0; i < ASIZE(initsigs); i++) {
 		sigaddset(&sigset, initsigs[i]);
 	}
 	sigprocmask(SIG_BLOCK, &sigset, NULL);
@@ -11514,29 +11679,25 @@ int init_main(int argc, char *argv[])
 			stop_lan();
 			stop_vlan();
 
-			if ((state == SIGTERM /* REBOOT */) ||
-			    (state == SIGQUIT /* HALT */)) {
-				stop_syslog();
+			if ((state == SIGTERM) || /* REBOOT */
+			    (state == SIGQUIT)) { /* HALT */
 				killall("buttons", SIGTERM);
 				killall("udhcpc", SIGTERM);
+				remove_conntrack();
+				stop_jffs2();
+				stop_syslog();
 #ifdef TCONFIG_USB
 				remove_storage_main(1);
 				stop_usb();
-#ifndef TCONFIG_USBAP
-				remove_usb_module();
-#endif
+				sleep(1);
 #endif /* TCONFIG_USB */
-				remove_conntrack();
-				stop_jffs2();
-
-				shutdn(state == SIGTERM /* REBOOT */);
+				shutdn(state == SIGTERM); /* REBOOT */
 				sync(); sync(); sync();
 				exit(0);
 			}
 			if (state == SIGINT) { /* STOP */
 				break;
 			}
-
 			/* SIGHUP (RESTART) falls through */
 
 			//nvram_set("wireless_restart_req", "1"); /* restart wifi twice to make sure all is working ok! not needed right now M_ars */
@@ -11657,7 +11818,10 @@ int reboothalt_main(int argc, char *argv[])
 	int reboot = (strstr(argv[0], "reboot") != NULL);
 	int def_reset_wait = 30;
 
-	cprintf(reboot ? "Rebooting...\n" : "Shutting down...\n");
+	puts(reboot ? "Rebooting...\n" : "Shutting down...\n"); /* self is reboot? */
+	fflush(stdout);
+	sleep(1);
+
 	kill(1, reboot ? SIGTERM : SIGQUIT);
 
 	int wait = nvram_get_int("reset_wait") ? : def_reset_wait;
@@ -11671,10 +11835,10 @@ int reboothalt_main(int argc, char *argv[])
 
 		f_write("/proc/sysrq-trigger", "s", 1, 0 , 0); /* sync disks */
 		sleep(wait);
-		cprintf("Still running... Doing machine reset.\n");
-#ifdef TCONFIG_USB
-		remove_usb_module();
-#endif
+
+		puts("Still running... Doing machine reset.\n");
+		fflush(stdout);
+
 		f_write("/proc/sysrq-trigger", "s", 1, 0 , 0); /* sync disks */
 		sleep(1);
 		f_write("/proc/sysrq-trigger", "b", 1, 0 , 0); /* machine reset */

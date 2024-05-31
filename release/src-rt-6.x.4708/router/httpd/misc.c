@@ -530,8 +530,9 @@ void asp_jiffies(int argc, char **argv)
 void asp_etherstates(int argc, char **argv)
 {
 	FILE *f;
-	char s[32], *a, b[16];
+	char s[32], a[8], b[16];
 	unsigned n;
+	int p;
 
 	if (nvram_match("lan_state", "1")) {
 		web_puts("\netherstates = {");
@@ -540,21 +541,11 @@ void asp_etherstates(int argc, char **argv)
 		n = 0;
 		if ((f = fopen("/tmp/ethernet.state", "r"))) {
 			while (fgets(s, sizeof(s), f)) {
-				if (sscanf(s, "Port 0: %s", b) == 1)
-					a = "port0";
-				else if (sscanf(s, "Port 1: %s", b) == 1)
-					a = "port1";
-				else if (sscanf(s, "Port 2: %s", b) == 1)
-					a = "port2";
-				else if (sscanf(s, "Port 3: %s", b) == 1)
-					a = "port3";
-				else if (sscanf(s, "Port 4: %s", b) == 1)
-					a = "port4";
-				else
-					continue;
-
-				web_printf("%s\t%s: '%s'", n ? ",\n" : "", a, b);
-				n++;
+				if (sscanf(s, "Port %d: %s", &p, b) == 2) {
+					snprintf(a, sizeof(a), "port%d", p);
+					web_printf("%s\t%s: '%s'", n ? ",\n" : "", a, b);
+					n++;
+				}
 			}
 			fclose(f);
 		}
@@ -812,6 +803,28 @@ void asp_time(int argc, char **argv)
 		strftime(s, sizeof(s), "%a, %d %b %Y %H:%M:%S %z", localtime(&t));
 		web_puts(s);
 	}
+}
+
+void asp_ntp(int argc, char **argv)
+{
+	FILE *file;
+	char line [100];
+
+	if (access("/tmp/ntpd", F_OK) != 0) {
+		web_puts("<span class=\"blinking\">Not Available</span>");
+		return;
+	}
+
+	file = fopen("/tmp/ntpd", "r");
+	if(file == NULL)
+		return;
+
+	while(fgets(line, sizeof(line), file)) {
+		line[strcspn(line, "\n")] = '\0';
+		web_printf("%s\\n \\\n", line);
+	}
+
+	fclose(file);
 }
 
 #ifdef TCONFIG_SDHC

@@ -87,6 +87,8 @@ jobs:
           - name: nondefault options
             nondefault: 1
             configure_flags: --enable-pam
+            localoptions: |
+              #define DROPBEAR_USE_SSH_CONFIG 1
 
           - name: most options disabled
             configure_flags: --disable-harden --disable-zlib --disable-openpty --disable-lastlog
@@ -123,6 +125,22 @@ jobs:
               #define DROPBEAR_CLI_PUBKEY_AUTH 0
               #define DROPBEAR_USE_PASSWORD_ENV 0
               #define DROPBEAR_SFTPSERVER 0
+
+          - name: other algo combos
+            runcheck: 'no'
+            # disables all sha1
+            localoptions: |
+              #define DROPBEAR_SHA1_HMAC 0
+              #define DROPBEAR_RSA_SHA1 0
+              #define DROPBEAR_DH_GROUP14_SHA1 0
+              #define DROPBEAR_ECDSA 0
+              #define DROPBEAR_ED25519 0
+              #define DROPBEAR_SK_KEYS 0
+              #define DROPBEAR_ENABLE_GCM_MODE 1
+              #define DROPBEAR_3DES 1
+              #define DROPBEAR_DH_GROUP16 1
+              #define DROPBEAR_SHA2_512_HMAC 1
+              #define DROPBEAR_CLI_PUBKEY_AUTH 0
 
           # # Fuzzers run standalone. A bit superfluous with cifuzz, but
           # # good to run the whole corpus to keep it working.
@@ -168,7 +186,7 @@ jobs:
           sudo apt-get -y update
           sudo apt-get -y install zlib1g-dev libtomcrypt-dev libtommath-dev mercurial python3-venv libpam0g-dev $CC
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: configure
         run: ./configure $CONFIGURE_FLAGS CFLAGS="-O2 -Wall -Wno-pointer-sign $EXTRACFLAGS" --prefix="$HOME/inst" || (cat config.log; exit 1)
@@ -179,9 +197,7 @@ jobs:
 
       - name: localoptions
         run: |
-          echo "$LOCALOPTIONS" > localoptions.h
-          echo "#define DROPBEAR_DSS 1" >> localoptions.h
-          cat localoptions.h
+          echo "$LOCALOPTIONS" | tee localoptions.h
 
       - name: nondefault
         if: ${{ matrix.nondefault }}
@@ -247,9 +263,6 @@ jobs:
       - name: genrsa
         if: ${{ matrix.runcheck != 'no' }}
         run: ~/inst/bin/dropbearkey -t rsa -f testrsa
-      - name: gendss
-        if: ${{ matrix.runcheck != 'no' }}
-        run: ~/inst/bin/dropbearkey -t dss -f testdss
       - name: genecdsa256
         if: ${{ matrix.runcheck != 'no' }}
         run: ~/inst/bin/dropbearkey -t ecdsa -f testec256 -s 256

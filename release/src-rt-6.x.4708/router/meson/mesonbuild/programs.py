@@ -1,16 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2013-2020 The Meson development team
 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from __future__ import annotations
 
 """Representations and logic for External and Internal Programs."""
 
@@ -25,7 +16,7 @@ from pathlib import Path
 
 from . import mesonlib
 from . import mlog
-from .mesonlib import MachineChoice
+from .mesonlib import MachineChoice, OrderedSet
 
 if T.TYPE_CHECKING:
     from .environment import Environment
@@ -102,13 +93,12 @@ class ExternalProgram(mesonlib.HoldableObject):
 
     def get_version(self, interpreter: T.Optional['Interpreter'] = None) -> str:
         if not self.cached_version:
-            from . import build
             raw_cmd = self.get_command() + ['--version']
             if interpreter:
-                res = interpreter.run_command_impl(interpreter.current_node, (self, ['--version']),
+                res = interpreter.run_command_impl((self, ['--version']),
                                                    {'capture': True,
                                                     'check': True,
-                                                    'env': build.EnvironmentVariables()},
+                                                    'env': mesonlib.EnvironmentVariables()},
                                                    True)
                 o, e = res.stdout, res.stderr
             else:
@@ -345,25 +335,6 @@ class NonExistingExternalProgram(ExternalProgram):  # lgtm [py/missing-call-to-i
         return False
 
 
-class EmptyExternalProgram(ExternalProgram):  # lgtm [py/missing-call-to-init]
-    '''
-    A program object that returns an empty list of commands. Used for cases
-    such as a cross file exe_wrapper to represent that it's not required.
-    '''
-
-    def __init__(self) -> None:
-        self.name = None
-        self.command = []
-        self.path = None
-
-    def __repr__(self) -> str:
-        r = '<{} {!r} -> {!r}>'
-        return r.format(self.__class__.__name__, self.name, self.command)
-
-    def found(self) -> bool:
-        return True
-
-
 class OverrideProgram(ExternalProgram):
 
     """A script overriding a program."""
@@ -372,16 +343,19 @@ class OverrideProgram(ExternalProgram):
 def find_external_program(env: 'Environment', for_machine: MachineChoice, name: str,
                           display_name: str, default_names: T.List[str],
                           allow_default_for_cross: bool = True) -> T.Generator['ExternalProgram', None, None]:
-    """Find an external program, chcking the cross file plus any default options."""
+    """Find an external program, checking the cross file plus any default options."""
+    potential_names = OrderedSet(default_names)
+    potential_names.add(name)
     # Lookup in cross or machine file.
-    potential_cmd = env.lookup_binary_entry(for_machine, name)
-    if potential_cmd is not None:
-        mlog.debug(f'{display_name} binary for {for_machine} specified from cross file, native file, '
-                   f'or env var as {potential_cmd}')
-        yield ExternalProgram.from_entry(name, potential_cmd)
-        # We never fallback if the user-specified option is no good, so
-        # stop returning options.
-        return
+    for potential_name in potential_names:
+        potential_cmd = env.lookup_binary_entry(for_machine, potential_name)
+        if potential_cmd is not None:
+            mlog.debug(f'{display_name} binary for {for_machine} specified from cross file, native file, '
+                       f'or env var as {potential_cmd}')
+            yield ExternalProgram.from_entry(potential_name, potential_cmd)
+            # We never fallback if the user-specified option is no good, so
+            # stop returning options.
+            return
     mlog.debug(f'{display_name} binary missing from cross or native file, or env var undefined.')
     # Fallback on hard-coded defaults, if a default binary is allowed for use
     # with cross targets, or if this is not a cross target

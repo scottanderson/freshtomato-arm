@@ -1,16 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2019 The Meson development team
 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from __future__ import annotations
 
 from .common import CMakeException, CMakeBuildFile, CMakeConfiguration
 import typing as T
@@ -23,14 +14,16 @@ STRIP_KEYS = ['cmake', 'reply', 'backtrace', 'backtraceGraph', 'version']
 
 class CMakeFileAPI:
     def __init__(self, build_dir: Path):
-        self.build_dir            = build_dir
-        self.api_base_dir         = self.build_dir / '.cmake' / 'api' / 'v1'
-        self.request_dir          = self.api_base_dir / 'query' / 'client-meson'
-        self.reply_dir            = self.api_base_dir / 'reply'
-        self.cmake_sources        = []   # type: T.List[CMakeBuildFile]
-        self.cmake_configurations = []   # type: T.List[CMakeConfiguration]
-        self.kind_resolver_map    = {
+        self.build_dir = build_dir
+        self.api_base_dir = self.build_dir / '.cmake' / 'api' / 'v1'
+        self.request_dir = self.api_base_dir / 'query' / 'client-meson'
+        self.reply_dir = self.api_base_dir / 'reply'
+        self.cmake_sources: T.List[CMakeBuildFile] = []
+        self.cmake_configurations: T.List[CMakeConfiguration] = []
+        self.project_version = ''
+        self.kind_resolver_map = {
             'codemodel': self._parse_codemodel,
+            'cache': self._parse_cache,
             'cmakeFiles': self._parse_cmakeFiles,
         }
 
@@ -40,12 +33,16 @@ class CMakeFileAPI:
     def get_cmake_configurations(self) -> T.List[CMakeConfiguration]:
         return self.cmake_configurations
 
+    def get_project_version(self) -> str:
+        return self.project_version
+
     def setup_request(self) -> None:
         self.request_dir.mkdir(parents=True, exist_ok=True)
 
         query = {
             'requests': [
                 {'kind': 'codemodel', 'version': {'major': 2, 'minor': 0}},
+                {'kind': 'cache', 'version': {'major': 2, 'minor': 0}},
                 {'kind': 'cmakeFiles', 'version': {'major': 1, 'minor': 0}},
             ]
         }
@@ -103,7 +100,7 @@ class CMakeFileAPI:
             src_dir = Path(dir_entry.get('source', '.'))
             bld_dir = Path(dir_entry.get('build', '.'))
             src_dir = src_dir if src_dir.is_absolute() else source_dir / src_dir
-            bld_dir = bld_dir if bld_dir.is_absolute() else build_dir  / bld_dir
+            bld_dir = bld_dir if bld_dir.is_absolute() else build_dir / bld_dir
             src_dir = src_dir.resolve()
             bld_dir = bld_dir.resolve()
 
@@ -277,6 +274,13 @@ class CMakeFileAPI:
             path = Path(i['path'])
             path = path if path.is_absolute() else src_dir / path
             self.cmake_sources += [CMakeBuildFile(path, i.get('isCMake', False), i.get('isGenerated', False))]
+
+    def _parse_cache(self, data: T.Dict[str, T.Any]) -> None:
+        assert 'entries' in data
+
+        for e in data['entries']:
+            if e['name'] == 'CMAKE_PROJECT_VERSION':
+                self.project_version = e['value']
 
     def _strip_data(self, data: T.Any) -> T.Any:
         if isinstance(data, list):

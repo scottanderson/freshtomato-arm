@@ -31,7 +31,7 @@
  *
  * Modified for Tomato Firmware
  * Portions, Copyright (C) 2006-2009 Jonathan Zarate
- * Fixes/updates (C) 2018 - 2023 pedro
+ * Fixes/updates (C) 2018 - 2024 pedro
  *
  */
 
@@ -99,6 +99,7 @@ static const char dmresolv[] = "/etc/resolv.dnsmasq";
 static pid_t pid_crond = -1;
 static pid_t pid_hotplug2 = -1;
 static pid_t pid_igmp = -1;
+static pid_t pid_ntpd = -1;
 #ifdef TCONFIG_FANCTRL
 static pid_t pid_phy_tempsense = -1;
 #endif
@@ -364,7 +365,7 @@ void start_dnsmasq()
 	char *mac, *ip, *name, *bind;
 	char *nve, *nvp;
 	unsigned char ea[ETHER_ADDR_LEN];
-	int n;
+	int i, n;
 	int dhcp_lease;
 	int do_dhcpd, do_dns, do_dhcpd_hosts = 0;
 #ifdef TCONFIG_IPV6
@@ -435,7 +436,7 @@ void start_dnsmasq()
 
 	/* instruct clients like Firefox to not auto-enable DoH */
 	if (nvram_get_int("dns_priv_override")) {
-		fprintf(f, "address=/use-application-dns.net/\n"
+		fprintf(f, "address=/use-application-dns.net/mask.icloud.com/mask-h2.icloud.com/\n"
 		           "address=/_dns.resolver.arpa/\n");
 	}
 
@@ -456,13 +457,14 @@ void start_dnsmasq()
 	if ((nvram_get_int("tor_enable")) && (nvram_get_int("dnsmasq_onion_support"))) {
 		char *t_ip = nvram_safe_get("lan_ipaddr");
 
-		if (nvram_match("tor_iface", "br1"))
-			t_ip = nvram_safe_get("lan1_ipaddr");
-		if (nvram_match("tor_iface", "br2"))
-			t_ip = nvram_safe_get("lan2_ipaddr");
-		if (nvram_match("tor_iface", "br3"))
-			t_ip = nvram_safe_get("lan3_ipaddr");
-
+		for (i = 1; i < BRIDGE_COUNT; i++ ) {
+			snprintf(buf, sizeof(buf), "br%d", i);
+			if (nvram_match("tor_iface", buf)) {
+				snprintf(buf, sizeof(buf), "lan%d_ipaddr", i);
+				t_ip = nvram_safe_get(buf);
+				break;
+			}
+		}
 		fprintf(f, "server=/onion/%s#%s\n", t_ip, nvram_safe_get("tor_dnsport"));
 	}
 #endif
@@ -503,14 +505,11 @@ void start_dnsmasq()
 	}
 
 	/* ignore DHCP requests from unknown devices for given LAN */
-	if (nvram_get_int("dhcpd_ostatic"))
-		fprintf(f, "dhcp-ignore=tag:br0,tag:!known\n");
-	if (nvram_get_int("dhcpd1_ostatic"))
-		fprintf(f, "dhcp-ignore=tag:br1,tag:!known\n");
-	if (nvram_get_int("dhcpd2_ostatic"))
-		fprintf(f, "dhcp-ignore=tag:br2,tag:!known\n");
-	if (nvram_get_int("dhcpd3_ostatic"))
-		fprintf(f, "dhcp-ignore=tag:br3,tag:!known\n");
+	for (i = 0; i < BRIDGE_COUNT; i++) {
+		snprintf(buf, sizeof(buf), (i == 0 ? "dhcpd_ostatic" : "dhcpd%d_ostatic"), i);
+		if (nvram_get_int(buf))
+			fprintf(f, "dhcp-ignore=tag:br%d,tag:!known\n", i);
+	}
 
 	if ((n = nvram_get_int("dnsmasq_q"))) { /* process quiet flags */
 		if (n & 1)
@@ -886,14 +885,14 @@ void start_dnsmasq()
 		           "tftp-root=%s\n",
 		           nvram_safe_get("dnsmasq_tftp_path"));
 
-		if (nvram_get_int("dnsmasq_pxelan0") && strlen(nvram_safe_get("lan_ifname")) > 0)
-			fprintf(f, "dhcp-boot=pxelinux.0,,%s\n", nvram_safe_get("lan_ipaddr"));
-		if (nvram_get_int("dnsmasq_pxelan1") && strlen(nvram_safe_get("lan1_ifname")) > 0)
-			fprintf(f, "dhcp-boot=pxelinux.0,,%s\n", nvram_safe_get("lan1_ipaddr"));
-		if (nvram_get_int("dnsmasq_pxelan2") && strlen(nvram_safe_get("lan2_ifname")) > 0)
-			fprintf(f, "dhcp-boot=pxelinux.0,,%s\n", nvram_safe_get("lan2_ipaddr"));
-		if (nvram_get_int("dnsmasq_pxelan3") && strlen(nvram_safe_get("lan3_ifname")) > 0)
-			fprintf(f, "dhcp-boot=pxelinux.0,,%s\n", nvram_safe_get("lan3_ipaddr"));
+		for (i = 0; i < BRIDGE_COUNT; i++) {
+			snprintf(buf, sizeof(buf), "dnsmasq_pxelan%d", i);
+			snprintf(tmp, sizeof(tmp), (i == 0 ? "lan_ifname" : "lan%d_ifname"), i);
+			if (nvram_get_int(buf) && strlen(nvram_safe_get(tmp)) > 0) {
+				snprintf(tmp, sizeof(tmp), (i == 0 ? "lan_ipaddr" : "lan%d_ipaddr"), i);
+				fprintf(f, "dhcp-boot=pxelinux.0,,%s\n", nvram_safe_get(tmp));
+			}
+		}
 	}
 #endif /* TCONFIG_USB_EXTRAS */
 
@@ -1169,11 +1168,6 @@ void generate_mdns_config(void)
 {
 	FILE *fp;
 	char avahi_config[80];
-	char *wan2_ifname;
-#ifdef TCONFIG_MULTIWAN
-	char *wan3_ifname;
-	char *wan4_ifname;
-#endif
 
 	snprintf(avahi_config, sizeof(avahi_config), "%s/%s", AVAHI_CONFIG_PATH, AVAHI_CONFIG_FN);
 
@@ -1189,19 +1183,15 @@ void generate_mdns_config(void)
 	            "use-ipv6=%s\n"
 	            "deny-interfaces=%s",
 	            ipv6_enabled() ? "yes" : "no",
-	            nvram_safe_get("wan_ifname"));
+	            get_wanface("wan"));
 
-	wan2_ifname = nvram_safe_get("wan2_ifname");
-	if (*wan2_ifname)
-		fprintf(fp, ",%s", wan2_ifname);
-
+	if (check_wanup("wan2"))
+		fprintf(fp, ",%s", get_wanface("wan2"));
 #ifdef TCONFIG_MULTIWAN
-	wan3_ifname = nvram_safe_get("wan3_ifname");
-	if (*wan3_ifname)
-		fprintf(fp, ",%s", wan3_ifname);
-	wan4_ifname = nvram_safe_get("wan4_ifname");
-	if (*wan4_ifname)
-		fprintf(fp, ",%s", wan4_ifname);
+	if (check_wanup("wan3"))
+		fprintf(fp, ",%s", get_wanface("wan3"));
+	if (check_wanup("wan4"))
+		fprintf(fp, ",%s", get_wanface("wan4"));
 #endif
 
 	fprintf(fp, "\n"
@@ -1283,8 +1273,7 @@ void start_irqbalance(void)
 	if (serialize_restart("irqbalance", 1))
 		return;
 
-	mkdir_if_none("/var/run/irqbalance");
-	ret = eval("irqbalance", "-t", "10");
+	ret = eval("irqbalance", "-t", "10", "-s", "/var/run/irqbalance.pid");
 
 	if (ret)
 		logmsg(LOG_ERR, "starting irqbalance failed ...");
@@ -1311,6 +1300,9 @@ void stop_phy_tempsense()
 
 void start_adblock(int update)
 {
+	if (nvram_get_int("g_upgrade") || nvram_get_int("g_reboot"))
+		return;
+
 	if (!nvram_get_int("adblock_enable"))
 		return;
 
@@ -1393,7 +1385,7 @@ void dns_to_resolv(void)
 			logmsg(LOG_DEBUG, "*** %s: exclusive: %d", __FUNCTION__, exclusive);
 			if (!exclusive) { /* exclusive check */
 #ifdef TCONFIG_IPV6
-				if ((write_ipv6_dns_servers(f, "nameserver ", nvram_safe_get("ipv6_dns"), "\n", 0) == 0) || (nvram_get_int("dns_addget")))
+				if ((write_ipv6_dns_servers(f, "nameserver ", nvram_safe_get("ipv6_dns"), "\n", 0) == 0) || (nvram_get_int("wan_addget"))) /* addget only for the first WAN */
 					if (append == 1) /* only once */
 						write_ipv6_dns_servers(f, "nameserver ", nvram_safe_get("ipv6_get_dns"), "\n", 0);
 #endif
@@ -1784,16 +1776,13 @@ void start_upnp(void)
 	char *lanip, *lanmask, *lanifname;
 	char br;
 
-	if (get_wan_proto() == WP_DISABLED)
+	enable = nvram_get_int("upnp_enable");
+
+	/* only if enabled and proto not disabled */
+	if ((enable == 0) || (get_wan_proto() == WP_DISABLED))
 		return;
 
 	if (serialize_restart("miniupnpd", 1))
-		return;
-
-	enable = nvram_get_int("upnp_enable");
-
-	/* only if enabled */
-	if (enable == 0)
 		return;
 
 	add_upnp_defaults(); /* backup: check nvram! */
@@ -2254,6 +2243,7 @@ void start_igmp_proxy(void)
 	char wan_prefix[] = "wanXX";
 	int wan_unit, mwan_num, count = 0;
 	int ret = 1;
+	int i, enabled_interface;
 
 	mwan_num = nvram_get_int("mwan_num");
 	if ((mwan_num < 1) || (mwan_num > MWAN_MAX))
@@ -2275,7 +2265,12 @@ void start_igmp_proxy(void)
 		 * see https://github.com/pali/igmpproxy/commit/b55e0125c79fc9dbc95c6d6ab1121570f0c6f80f and
 		 * see https://github.com/pali/igmpproxy/blob/master/igmpproxy.conf
 		 */
-		if ((!nvram_get_int("multicast_lan")) && (!nvram_get_int("multicast_lan1")) && (!nvram_get_int("multicast_lan2")) && (!nvram_get_int("multicast_lan3"))) {
+		enabled_interface=0;
+		for (i = 0; i < BRIDGE_COUNT; i++) {
+			snprintf(igmp_buffer, sizeof(igmp_buffer), (i == 0 ? "multicast_lan" : "multicast_lan%d"), i);
+			enabled_interface += nvram_get_int(igmp_buffer);
+		}
+		if (!enabled_interface) {
 			fprintf(fp, "%s\n", nvram_safe_get("multicast_custom"));
 			fclose(fp);
 			ret = eval("igmpproxy", IGMP_CONF);
@@ -2500,6 +2495,10 @@ void start_ntpd(void)
 		}
 
 		ret = _eval(ntpd_argv, NULL, 0, &pid);
+
+		if (!nvram_contains_word("debug_norestart", "ntpd"))
+			pid_ntpd = -2;
+
 		if (ret)
 			logmsg(LOG_ERR, "starting ntpd failed ...");
 		else
@@ -2512,6 +2511,7 @@ void stop_ntpd(void)
 	if (serialize_restart("ntpd", 0))
 		return;
 
+	pid_ntpd = -1;
 	if (pidof("ntpd") > 0) {
 		killall_tk_period_wait("ntpd", 50);
 		logmsg(LOG_INFO, "ntpd is stopped");
@@ -2527,6 +2527,7 @@ int ntpd_synced_main(int argc, char *argv[])
 		stop_httpd();
 		start_httpd();
 		start_sched();
+		stop_ddns();
 		start_ddns();
 #ifdef TCONFIG_DNSCRYPT
 		stop_dnscrypt();
@@ -2552,6 +2553,35 @@ int ntpd_synced_main(int argc, char *argv[])
 #endif
 	}
 
+	FILE *file;
+	char message[300];
+	char *stratum = safe_getenv("stratum");
+	char *offset = safe_getenv("offset");
+	char *freq_drift_ppm = safe_getenv("freq_drift_ppm");
+	char *poll_interval = safe_getenv("poll_interval");
+	char *server_hostname = safe_getenv("server_hostname");
+	char *server_ip = safe_getenv("server_ip");
+	char *discipline_jitter = safe_getenv("discipline_jitter");
+
+	snprintf(message, sizeof(message), "Server: %s (%s)\n"
+					   "Poll Interval: %ss\n"
+					   "Stratum: %s\n"
+					   "Offset: %ss\n"
+					   "Jitter: %ss\n"
+					   "Frequency: %sppm\n",
+					    server_ip, server_hostname,
+					    poll_interval,
+					    stratum,
+					    offset,
+					    discipline_jitter,
+					    freq_drift_ppm);
+
+	if (!(file = fopen("/tmp/ntpd", "w"))) {
+		return 1;
+	}
+
+	fprintf(file,"%s", message);
+	fclose(file);
 	return 0;
 }
 
@@ -2646,7 +2676,7 @@ static void start_media_server(int force)
 	int port, https;
 	pid_t pid;
 	char *dbdir;
-	char *argv[] = { "minidlna", "-f", "/etc/minidlna.conf", "-r", NULL, NULL };
+	char *argv[] = { "minidlna", "-f", "/etc/minidlna.conf", "-r", "-P", "/var/run/minidlna.pid", NULL, NULL };
 	static int once = 1;
 	int ret, index = 4, i;
 	char *msi;
@@ -2686,7 +2716,7 @@ static void start_media_server(int force)
 			if (!(*dbdir))
 				dbdir = NULL;
 
-			mkdir_if_none(dbdir ? : "/var/run/minidlna");
+			mkdir_if_none(dbdir ? : "/var/lib/minidlna");
 
 			/* persistent ident (router's mac as serial) */
 			if (!ether_atoe(nvram_safe_get("lan_hwaddr"), ea))
@@ -2732,7 +2762,7 @@ static void start_media_server(int force)
 			           "%s\n",
 			           strlen(msi) ? msi : nvram_safe_get("lan_ifname"),
 			           (port < 0) || (port >= 0xffff) ? 0 : port, /* 0 - means random port (feature applied as minidlna patch) */
-			           dbdir ? : "/var/run/minidlna",
+			           dbdir ? : "/var/lib/minidlna",
 			           nvram_get_int("ms_tivo") ? "yes" : "no",
 			           nvram_get_int("ms_stdlna") ? "yes" : "no",
 			           https ? "s" : "", nvram_safe_get("lan_ipaddr"), nvram_safe_get(https ? "https_lanport" : "http_lanport"),
@@ -2787,6 +2817,36 @@ static void stop_media_server(void)
 	eval("rm", "-rf", "/var/run/minidlna");
 }
 #endif /* TCONFIG_MEDIA_SERVER */
+
+#ifdef TCONFIG_HAVEGED
+void start_haveged(void)
+{
+	pid_t pid;
+
+	if (serialize_restart("haveged", 1))
+		return;
+
+	char *cmd_argv[] = { "/usr/sbin/haveged",
+	                     "-r", "0",             /* 0 = run as daemon */
+	                     "-w", "1024",          /* write_wakeup_threshold [bits] */
+#ifdef TCONFIG_BCMARM /* it has to be checkd for all MIPS routers */
+	                     "-d", "32",            /* data cache size [KB] - fallback to 16 */
+	                     "-i", "32",            /* instruction cache size [KB] - fallback to 16 */
+#endif
+	                     NULL };
+
+	_eval(cmd_argv, NULL, 0, &pid);
+}
+
+void stop_haveged(void)
+{
+	if (serialize_restart("haveged", 0))
+		return;
+
+	if (pidof("haveged") > 0)
+		killall_tk_period_wait("haveged", 50);
+}
+#endif /* TCONFIG_HAVEGED */
 
 #ifdef TCONFIG_USB
 static void start_nas_services(void)
@@ -2874,6 +2934,8 @@ void check_services(void)
 //		_check(pid_dnsmasq, "dnsmasq", start_dnsmasq);
 		_check(pid_crond, "crond", start_cron);
 		_check(pid_igmp, "igmpproxy", start_igmp_proxy);
+		if (nvram_get_int("ntp_updates") >= 1)
+			_check(pid_ntpd, "ntpd", start_ntpd);
 	}
 }
 
@@ -2881,6 +2943,9 @@ void start_services(void)
 {
 	static int once = 1;
 
+#ifdef TCONFIG_HAVEGED
+	start_haveged();
+#endif
 	if (once) {
 		once = 0;
 
@@ -3019,6 +3084,9 @@ void stop_services(void)
 #endif
 #ifdef TCONFIG_IRQBALANCE
 	stop_irqbalance();
+#endif
+#ifdef TCONFIG_HAVEGED
+	stop_haveged();
 #endif
 }
 
@@ -3178,6 +3246,14 @@ TOP:
 	if (strcmp(service, "irqbalance") == 0) {
 		if (act_stop) stop_irqbalance();
 		if (act_start) start_irqbalance();
+		goto CLEAR;
+	}
+#endif
+
+#ifdef TCONFIG_HAVEGED
+	if (strcmp(service, "haveged") == 0) {
+		if (act_stop) stop_haveged();
+		if (act_start) start_haveged();
 		goto CLEAR;
 	}
 #endif
@@ -3366,57 +3442,67 @@ TOP:
 
 	if (strcmp(service, "upgrade") == 0) {
 		if (act_start) {
+			nvram_set("g_upgrade", "1");
+
 			if (nvram_get_int("webmon_bkp"))
 				xstart("/usr/sbin/webmon_bkp", "hourly"); /* make a copy before upgrade */
 
-			nvram_set("g_upgrade", "1");
 			stop_sched();
 			stop_cron();
-			killall("rstats", SIGTERM);
-			killall("cstats", SIGTERM);
-#ifdef TCONFIG_USB
-			restart_nas_services(1, 0); /* Samba, FTP and Media Server */
-#endif
-#ifdef TCONFIG_ZEBRA
-			stop_zebra();
-#endif
-#ifdef TCONFIG_BT
-			stop_bittorrent();
-#endif
 #ifdef TCONFIG_NGINX
 			stop_mysql();
 			stop_nginx();
 #endif
+#ifdef TCONFIG_NFS
+			stop_nfs();
+#endif
+#ifdef TCONFIG_USB
+			restart_nas_services(1, 0); /* Samba, FTP and Media Server */
+#endif
+#ifdef TCONFIG_BT
+			stop_bittorrent();
+#endif
+#ifdef TCONFIG_NOCAT
+			stop_nocat();
+#endif
 #ifdef TCONFIG_TOR
 			stop_tor();
 #endif
-			stop_tomatoanon();
-#ifdef TCONFIG_IRQBALANCE
-			stop_irqbalance();
-#endif
+			killall("rstats", SIGTERM);
+			killall("cstats", SIGTERM);
 			killall("buttons", SIGTERM);
+			stop_upnp();
 			if (!nvram_get_int("remote_upgrade")) {
 				killall("xl2tpd", SIGTERM);
 				killall("pppd", SIGTERM);
 				stop_dnsmasq();
 				killall("udhcpc", SIGTERM);
 				stop_wan();
-			}
-			else
-				stop_ntpd();
+			} else
+				stop_adblock();
+
+			stop_ntpd();
+			stop_tomatoanon();
+			remove_conntrack();
+#ifdef TCONFIG_ZEBRA
+			stop_zebra();
+#endif
+#ifdef TCONFIG_IRQBALANCE
+			stop_irqbalance();
+#endif
 #ifdef TCONFIG_MDNS
 			stop_mdns();
 #endif
+#ifdef TCONFIG_HAVEGED
+			stop_haveged();
+#endif
+			stop_jffs2();
 			stop_syslog();
+			sleep(1);
 #ifdef TCONFIG_USB
 			remove_storage_main(1);
 			stop_usb();
-#ifndef TCONFIG_USBAP
-			remove_usb_module();
-#endif
 #endif /* TCONFIG_USB */
-			remove_conntrack();
-			stop_jffs2();
 		}
 		goto CLEAR;
 	}

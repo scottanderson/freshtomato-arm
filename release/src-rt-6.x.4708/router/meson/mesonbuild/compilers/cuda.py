@@ -1,16 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2012-2017 The Meson development team
 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from __future__ import annotations
 
 import enum
 import os.path
@@ -20,20 +11,37 @@ import typing as T
 from .. import coredata
 from .. import mlog
 from ..mesonlib import (
-    EnvironmentException, MachineChoice, Popen_safe, OptionOverrideProxy,
-    is_windows, LibType, OptionKey,
+    EnvironmentException, Popen_safe,
+    is_windows, LibType, OptionKey, version_compare,
 )
-from .compilers import (Compiler, cuda_buildtype_args, cuda_optimization_args,
-                        cuda_debug_args, CompileCheckMode)
+from .compilers import Compiler
 
 if T.TYPE_CHECKING:
+    from .compilers import CompileCheckMode
     from ..build import BuildTarget
     from ..coredata import MutableKeyedOptionDictType, KeyedOptionDictType
     from ..dependencies import Dependency
     from ..environment import Environment  # noqa: F401
     from ..envconfig import MachineInfo
-    from ..linkers import DynamicLinker
+    from ..linkers.linkers import DynamicLinker
+    from ..mesonlib import MachineChoice
     from ..programs import ExternalProgram
+
+
+cuda_optimization_args: T.Dict[str, T.List[str]] = {
+    'plain': [],
+    '0': ['-G'],
+    'g': ['-O0'],
+    '1': ['-O1'],
+    '2': ['-O2', '-lineinfo'],
+    '3': ['-O3'],
+    's': ['-O3']
+}
+
+cuda_debug_args: T.Dict[bool, T.List[str]] = {
+    False: [],
+    True: ['-g']
+}
 
 
 class _Phase(enum.Enum):
@@ -175,16 +183,23 @@ class CudaCompiler(Compiler):
 
     id = 'nvcc'
 
-    def __init__(self, exelist: T.List[str], version: str, for_machine: MachineChoice,
+    def __init__(self, ccache: T.List[str], exelist: T.List[str], version: str, for_machine: MachineChoice,
                  is_cross: bool, exe_wrapper: T.Optional['ExternalProgram'],
                  host_compiler: Compiler, info: 'MachineInfo',
                  linker: T.Optional['DynamicLinker'] = None,
                  full_version: T.Optional[str] = None):
-        super().__init__(exelist, version, for_machine, info, linker=linker, full_version=full_version, is_cross=is_cross)
+        super().__init__(ccache, exelist, version, for_machine, info, linker=linker, full_version=full_version, is_cross=is_cross)
         self.exe_wrapper = exe_wrapper
         self.host_compiler = host_compiler
         self.base_options = host_compiler.base_options
-        self.warn_args = {level: self._to_host_flags(flags) for level, flags in host_compiler.warn_args.items()}
+        # -Wpedantic generates useless churn due to nvcc's dual compilation model producing
+        # a temporary host C++ file that includes gcc-style line directives:
+        # https://stackoverflow.com/a/31001220
+        self.warn_args = {
+            level: self._to_host_flags(list(f for f in flags if f != '-Wpedantic'))
+            for level, flags in host_compiler.warn_args.items()
+        }
+        self.host_werror_args = ['-Xcompiler=' + x for x in self.host_compiler.get_werror_args()]
 
     @classmethod
     def _shield_nvcc_list_arg(cls, arg: str, listmode: bool = True) -> str:
@@ -227,7 +242,7 @@ class CudaCompiler(Compiler):
             instring = False
             argit = iter(arg)
             for c in argit:
-                if   c == CM and not instring:
+                if c == CM and not instring:
                     l.append('')
                 elif c == DQ:
                     l[-1] += c
@@ -361,7 +376,7 @@ class CudaCompiler(Compiler):
                 continue
 
             # Handle breakup of flag-values into a flag-part and value-part.
-            if   flag[:1] not in '-/':
+            if flag[:1] not in '-/':
                 # This is not a flag. It's probably a file input. Pass it through.
                 xflags.append(flag)
                 continue
@@ -376,7 +391,7 @@ class CudaCompiler(Compiler):
                 # This is a single-letter short option. These options (with the
                 # exception of -o) are allowed to receive their argument with neither
                 # space nor = sign before them. Detect and separate them in that event.
-                if   flag[2:3] == '':            # -I something
+                if flag[2:3] == '':            # -I something
                     try:
                         val = next(flagit)
                     except StopIteration:
@@ -387,7 +402,7 @@ class CudaCompiler(Compiler):
                     val = flag[2:]
                 flag = flag[:2]                  # -I
             elif flag in self._FLAG_LONG2SHORT_WITHARGS or \
-                 flag in self._FLAG_SHORT2LONG_WITHARGS:
+                    flag in self._FLAG_SHORT2LONG_WITHARGS:
                 # This is either -o or a multi-letter flag, and it is receiving its
                 # value isolated.
                 try:
@@ -395,7 +410,7 @@ class CudaCompiler(Compiler):
                 except StopIteration:
                     pass
             elif flag.split('=', 1)[0] in self._FLAG_LONG2SHORT_WITHARGS or \
-                 flag.split('=', 1)[0] in self._FLAG_SHORT2LONG_WITHARGS:
+                    flag.split('=', 1)[0] in self._FLAG_SHORT2LONG_WITHARGS:
                 # This is either -o or a multi-letter flag, and it is receiving its
                 # value after an = sign.
                 flag, val = flag.split('=', 1)    # -o=something
@@ -409,7 +424,7 @@ class CudaCompiler(Compiler):
                 # We do not know whether this GCC-speak flag takes an isolated
                 # argument. Assuming it does not (the vast majority indeed don't),
                 # wrap this argument in an -Xcompiler flag and send it down to NVCC.
-                if   flag == '-ffast-math':
+                if flag == '-ffast-math':
                     xflags.append('-use_fast_math')
                     xflags.append('-Xcompiler='+flag)
                 elif flag == '-fno-fast-math':
@@ -433,7 +448,7 @@ class CudaCompiler(Compiler):
             # Take care of the various NVCC-supported flags that need special handling.
             flag = self._FLAG_LONG2SHORT_WITHARGS.get(flag, flag)
 
-            if   flag in {'-include', '-isystem', '-I', '-L', '-l'}:
+            if flag in {'-include', '-isystem', '-I', '-L', '-l'}:
                 # These flags are known to GCC, but list-valued in NVCC. They potentially
                 # require double-quoting to prevent NVCC interpreting the flags as lists
                 # when GCC would not have done so.
@@ -453,7 +468,7 @@ class CudaCompiler(Compiler):
                     xflags.append(self._shield_nvcc_list_arg(val))
             elif flag == '-O':
                 # Handle optimization levels GCC knows about that NVCC does not.
-                if   val == 'fast':
+                if val == 'fast':
                     xflags.append('-O3')
                     xflags.append('-use_fast_math')
                     xflags.append('-Xcompiler')
@@ -554,7 +569,7 @@ class CudaCompiler(Compiler):
         mlog.debug(stde)
         mlog.debug('-----')
         if pc.returncode != 0:
-            raise EnvironmentException(f'Compiler {self.name_string()} can not compile programs.')
+            raise EnvironmentException(f'Compiler {self.name_string()} cannot compile programs.')
 
         # Run sanity check (if possible)
         if self.is_cross:
@@ -612,13 +627,26 @@ class CudaCompiler(Compiler):
         }}'''
         return self.compiles(t.format_map(fargs), env, extra_args=extra_args, dependencies=dependencies)
 
+    _CPP14_VERSION = '>=9.0'
+    _CPP17_VERSION = '>=11.0'
+    _CPP20_VERSION = '>=12.0'
+
     def get_options(self) -> 'MutableKeyedOptionDictType':
         opts = super().get_options()
-        std_key      = OptionKey('std',      machine=self.for_machine, lang=self.language)
+        std_key = OptionKey('std', machine=self.for_machine, lang=self.language)
         ccbindir_key = OptionKey('ccbindir', machine=self.for_machine, lang=self.language)
+
+        cpp_stds = ['none', 'c++03', 'c++11']
+        if version_compare(self.version, self._CPP14_VERSION):
+            cpp_stds += ['c++14']
+        if version_compare(self.version, self._CPP17_VERSION):
+            cpp_stds += ['c++17']
+        if version_compare(self.version, self._CPP20_VERSION):
+            cpp_stds += ['c++20']
+
         opts.update({
             std_key:      coredata.UserComboOption('C++ language standard to use with CUDA',
-                                                   ['none', 'c++03', 'c++11', 'c++14', 'c++17'], 'none'),
+                                                   cpp_stds, 'none'),
             ccbindir_key: coredata.UserStringOption('CUDA non-default toolchain directory to use (-ccbin)',
                                                     ''),
         })
@@ -634,7 +662,7 @@ class CudaCompiler(Compiler):
         host_options = {key: options.get(key, opt) for key, opt in self.host_compiler.get_options().items()}
         std_key = OptionKey('std', machine=self.for_machine, lang=self.host_compiler.language)
         overrides = {std_key: 'none'}
-        return OptionOverrideProxy(overrides, host_options)
+        return coredata.OptionsView(host_options, overrides=overrides)
 
     def get_option_compile_args(self, options: 'KeyedOptionDictType') -> T.List[str]:
         args = self.get_ccbin_args(options)
@@ -681,16 +709,11 @@ class CudaCompiler(Compiler):
         return cuda_debug_args[is_debug]
 
     def get_werror_args(self) -> T.List[str]:
-        return ['-Werror=cross-execution-space-call,deprecated-declarations,reorder']
+        device_werror_args = ['-Werror=cross-execution-space-call,deprecated-declarations,reorder']
+        return device_werror_args + self.host_werror_args
 
     def get_warn_args(self, level: str) -> T.List[str]:
         return self.warn_args[level]
-
-    def get_buildtype_args(self, buildtype: str) -> T.List[str]:
-        # nvcc doesn't support msvc's "Edit and Continue" PDB format; "downgrade" to
-        # a regular PDB to avoid cl's warning to that effect (D9025 : overriding '/ZI' with '/Zi')
-        host_args = ['/Zi' if arg == '/ZI' else arg for arg in self.host_compiler.get_buildtype_args(buildtype)]
-        return cuda_buildtype_args[buildtype] + self._to_host_flags(host_args)
 
     def get_include_args(self, path: str, is_system: bool) -> T.List[str]:
         if path == '':
@@ -706,8 +729,8 @@ class CudaCompiler(Compiler):
     def get_depfile_suffix(self) -> str:
         return 'd'
 
-    def get_buildtype_linker_args(self, buildtype: str) -> T.List[str]:
-        return self._to_host_flags(self.host_compiler.get_buildtype_linker_args(buildtype), _Phase.LINKER)
+    def get_optimization_link_args(self, optimization_level: str) -> T.List[str]:
+        return self._to_host_flags(self.host_compiler.get_optimization_link_args(optimization_level), _Phase.LINKER)
 
     def build_rpath_args(self, env: 'Environment', build_dir: str, from_dir: str,
                          rpath_paths: T.Tuple[str, ...], build_rpath: str,
@@ -729,11 +752,20 @@ class CudaCompiler(Compiler):
     def get_output_args(self, target: str) -> T.List[str]:
         return ['-o', target]
 
+    def get_dependency_gen_args(self, outtarget: str, outfile: str) -> T.List[str]:
+        if version_compare(self.version, '>= 10.2'):
+            # According to nvcc Documentation, `-MD` option is added after 10.2
+            # Reference: [CUDA 10.1](https://docs.nvidia.com/cuda/archive/10.1/cuda-compiler-driver-nvcc/index.html#options-for-specifying-compilation-phase-generate-nonsystem-dependencies)
+            # Reference: [CUDA 10.2](https://docs.nvidia.com/cuda/archive/10.2/cuda-compiler-driver-nvcc/index.html#options-for-specifying-compilation-phase-generate-nonsystem-dependencies)
+            return ['-MD', '-MT', outtarget, '-MF', outfile]
+        else:
+            return []
+
     def get_std_exe_link_args(self) -> T.List[str]:
         return self._to_host_flags(self.host_compiler.get_std_exe_link_args(), _Phase.LINKER)
 
     def find_library(self, libname: str, env: 'Environment', extra_dirs: T.List[str],
-                     libtype: LibType = LibType.PREFER_SHARED) -> T.Optional[T.List[str]]:
+                     libtype: LibType = LibType.PREFER_SHARED, lib_prefix_warning: bool = True) -> T.Optional[T.List[str]]:
         return ['-l' + libname] # FIXME
 
     def get_crt_compile_args(self, crt_val: str, buildtype: str) -> T.List[str]:
@@ -744,7 +776,7 @@ class CudaCompiler(Compiler):
         # native option to override it; override it with /NODEFAULTLIB
         host_link_arg_overrides = []
         host_crt_compile_args = self.host_compiler.get_crt_compile_args(crt_val, buildtype)
-        if any(arg in ['/MDd', '/MD', '/MTd'] for arg in host_crt_compile_args):
+        if any(arg in {'/MDd', '/MD', '/MTd'} for arg in host_crt_compile_args):
             host_link_arg_overrides += ['/NODEFAULTLIB:LIBCMT.lib']
         return self._to_host_flags(host_link_arg_overrides + self.host_compiler.get_crt_link_args(crt_val, buildtype), _Phase.LINKER)
 
@@ -771,5 +803,5 @@ class CudaCompiler(Compiler):
     def get_profile_use_args(self) -> T.List[str]:
         return ['-Xcompiler=' + x for x in self.host_compiler.get_profile_use_args()]
 
-    def get_disable_assert_args(self) -> T.List[str]:
-        return self.host_compiler.get_disable_assert_args()
+    def get_assert_args(self, disable: bool) -> T.List[str]:
+        return self.host_compiler.get_assert_args(disable)

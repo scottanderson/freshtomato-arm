@@ -54,6 +54,7 @@ TCONFIG_SAMBASRV=y
 # TCONFIG_DNSSEC is not set
 # TCONFIG_TINC is not set
 # TCONFIG_OPENSSL11 is not set
+# TCONFIG_OPENSSL30 is not set
 # TCONFIG_FANCTRL is not set
 # TCONFIG_NAND is not set
 # TCONFIG_UFSDA is not set
@@ -96,3 +97,4 @@ TCONFIG_ADVTHEMES=y
 # TCONFIG_IRQBALANCE is not set
 TCONFIG_TRXKEY=y
 # TCONFIG_PROXY is not set
+# TCONFIG_HAVEGED is not set

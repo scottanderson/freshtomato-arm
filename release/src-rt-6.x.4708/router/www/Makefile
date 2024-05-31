@@ -138,6 +138,11 @@ ifneq ($(TCONFIG_NOCAT),y)
 	sed -i $(INSTALLDIR)/www/about.asp -e "/NOCAT-BEGIN/,/NOCAT-END/d"
 endif
 
+# only add php-fpm part for ARM routers
+ifneq ($(TCONFIG_BCMARM),y)
+	sed -i $(INSTALLDIR)/www/web-nginx.asp -e "/BCMARM-BEGIN/,/BCMARM-END/d"
+endif
+
 # Clean up NGinX files if not needed
 ifneq ($(TCONFIG_NGINX),y)
 	rm -f $(INSTALLDIR)/www/web-nginx.asp
@@ -262,6 +267,7 @@ endif
 
 ifneq ($(TCONFIG_BCM714),y)
 	sed -i $(INSTALLDIR)/www/advanced-wireless.asp -e "/BCMWL714-BEGIN/,/BCMWL714-END/d"
+	sed -i $(INSTALLDIR)/www/admin-debug.asp -e "/BCMWL714-BEGIN/,/BCMWL714-END/d"
 endif
 
 # Only include the wireless band steering option if is compiled in
@@ -391,6 +397,25 @@ ifeq ($(TCONFIG_USB),y)
 endif
 endif
 
+# Only include Advanced Themes stuff if it is required
+ifneq ($(TCONFIG_ADVTHEMES),y)
+	rm -f $(INSTALLDIR)/www/resize-charts.js
+	rm -f $(INSTALLDIR)/www/at.css
+	rm -f $(INSTALLDIR)/www/at-blue.css
+	rm -f $(INSTALLDIR)/www/at-dark.css
+	rm -f $(INSTALLDIR)/www/at-green.css
+	rm -f $(INSTALLDIR)/www/at-red.css
+	sed -i $(INSTALLDIR)/www/admin-access.asp -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/bwm-24.asp -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/bwm-realtime.asp -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/ipt-24.asp -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/ipt-realtime.asp -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/tools-survey.asp -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/bwm-graph.svg -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/ipt-graph.svg -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+	sed -i $(INSTALLDIR)/www/qos-graph.svg -e "/ADVTHEMES-BEGIN/,/ADVTHEMES-END/d"
+endif
+
 # Only include Discovery helper if it is required
 ifneq ($(TCONFIG_BCMARM),y)
 ifneq ($(TCONFIG_MIPSR2),y)
@@ -406,7 +431,9 @@ endif
 # Only include the QR Code page if it is compiled in
 ifneq ($(TCONFIG_QRCODE),y)
 	rm -f $(INSTALLDIR)/www/tools-qr.asp
+ifneq ($(TCONFIG_WIREGUARD),y)
 	rm -f $(INSTALLDIR)/www/html5-qrcode.js
+endif
 	rm -f $(INSTALLDIR)/www/qrcode.js
 	sed -i $(INSTALLDIR)/www/tomato.js -e "/QRCODE-BEGIN/,/QRCODE-END/d"
 	sed -i $(INSTALLDIR)/www/status-overview.asp -e "/QRCODE-BEGIN/,/QRCODE-END/d"
@@ -452,16 +479,20 @@ endif
 ifneq ($(TCONFIG_WIREGUARD),y)
 	rm -f $(INSTALLDIR)/www/vpn-wireguard.asp
 	rm -f $(INSTALLDIR)/www/cfg-icon.svg
-	rm -f $(INSTALLDIR)/www/html5-qrcode.js
-#	rm -f $(INSTALLDIR)/www/interfaces-v6.js
 	rm -f $(INSTALLDIR)/www/qr-icon.svg
+ifneq ($(TCONFIG_QRCODE),y)
+	rm -f $(INSTALLDIR)/www/html5-qrcode.js
+endif
+#	rm -f $(INSTALLDIR)/www/interfaces-v6.js
 	rm -f $(INSTALLDIR)/www/wireguard.js
 	sed -i $(INSTALLDIR)/www/tomato.js -e "/WIREGUARD-BEGIN/,/WIREGUARD-END/d"
 endif
 
-# only add php-fpm part for ARM routers
-ifneq ($(TCONFIG_BCMARM),y)
-	sed -i $(INSTALLDIR)/www/web-nginx.asp -e "/BCMARM-BEGIN/,/BCMARM-END/d"
+# Only include 4 DDNS clients if nvram >= 64KB and optimize size is disabled
+ifeq ($(or $(TCONFIG_NVRAM_32K),$(TCONFIG_OPTIMIZE_SIZE)),y)
+	sed -i $(INSTALLDIR)/www/basic-ddns.asp -e "/DDNS4CLS-BEGIN/,/DDNS4CLS-END/d"
+else
+	sed -i $(INSTALLDIR)/www/basic-ddns.asp -e "/DDNS2CLS-BEGIN/,/DDNS2CLS-END/d"
 endif
 
 # clean up
@@ -511,6 +542,7 @@ endif
 		-e "/DUALWAN-BEGIN/d"	-e "/DUALWAN-END/d" \
 		-e "/HTTPS-BEGIN/d"	-e "/HTTPS-END/d" \
 		-e "/IPERF-BEGIN/d"	-e "/IPERF-END/d" \
+		-e "/ADVTHEMES-BEGIN/d"	-e "/ADVTHEMES-END/d" \
 		-e "/SSH-BEGIN/d"	-e "/SSH-END/d" \
 		-e "/DISCOVERY-BEGIN/d"	-e "/DISCOVERY-END/d" \
 		-e "/MDNS-BEGIN/d"	-e "/MDNS-END/d" \
@@ -522,6 +554,8 @@ endif
 		-e "/PROXY-BEGIN/d"	-e "/PROXY-END/d" \
 		-e "/TFTP-BEGIN/d"	-e "/TFTP-END/d" \
 		-e "/WIREGUARD-BEGIN/d"	-e "/WIREGUARD-END/d" \
+		-e "/DDNS4CLS-BEGIN/d"	-e "/DDNS4CLS-END/d" \
+		-e "/DDNS2CLS-BEGIN/d"	-e "/DDNS2CLS-END/d" \
 		|| true; \
 	done
 

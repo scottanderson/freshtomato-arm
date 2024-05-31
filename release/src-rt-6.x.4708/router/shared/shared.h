@@ -168,7 +168,6 @@ extern char *wl_nvname(const char *nv, int unit, int subunit);
 extern int get_radio(int unit);
 extern void set_radio(int on, int unit);
 extern int nvram_get_int(const char *key);
-extern int nvram_set_int(const char *key, int value);
 extern int nvram_get_file(const char *key, const char *fname, int max);
 extern int nvram_set_file(const char *key, const char *fname, int max);
 extern int nvram_contains_word(const char *key, const char *word);
@@ -230,6 +229,7 @@ enum {
 	MODEL_R6700v3,
 	MODEL_R6900,
 	MODEL_R7000,
+	MODEL_EX7000,
 	MODEL_XR300,
 #ifdef TCONFIG_AC3200
 	MODEL_R8000,
@@ -412,5 +412,8 @@ extern int dhd_bssiovar_setint(char *ifname, char *iovar, int bssidx, int val);
 /* shutils.c */
 extern pid_t get_pid_by_name(char *name); /* Returns the process ID */
 extern int getMTD(char *name); /* Find partition with defined name and return partition number as an integer */
+
+/* mdu.c/ddns.c */
+#define MDU_STOP_FN		"/var/lib/mdu/mdu-stop"
 
 #endif /* __SHARED_H__ */

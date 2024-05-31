@@ -1,16 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2016-2021 The Meson development team
-
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import unittest
 import io
@@ -36,6 +25,9 @@ class TAPParserTests(unittest.TestCase):
 
     def assert_error(self, events):
         self.assertEqual(type(next(events)), TAPParser.Error)
+
+    def assert_unexpected(self, events, **kwargs):
+        self.assertEqual(next(events), TAPParser.UnknownLine(**kwargs))
 
     def assert_bailout(self, events, **kwargs):
         self.assertEqual(next(events), TAPParser.Bailout(**kwargs))
@@ -255,6 +247,7 @@ class TAPParserTests(unittest.TestCase):
     def test_unexpected(self):
         events = self.parse_tap('1..1\ninvalid\nok 1')
         self.assert_plan(events, num_tests=1, late=False)
+        self.assert_unexpected(events, message='invalid', lineno=2)
         self.assert_test(events, number=1, name='', result=TestResult.OK)
         self.assert_last(events)
 

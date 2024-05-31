@@ -2,6 +2,7 @@
  *
  * Tomato Firmware
  * Copyright (C) 2006-2009 Jonathan Zarate
+ * Fixes/updates (C) 2018 - 2024 pedro
  *
  */
 
@@ -215,6 +216,7 @@ struct nvram_tuple router_defaults[] = {
 	{ "wan_gateway_get",		"0.0.0.0"			, 0 },	/* default gateway for PPP */
 	{ "wan_dns",			""				, 0 },	/* x.x.x.x x.x.x.x ... */
 	{ "wan_dns_auto",		"1"				, 0 },	/* wan auto dns to 1 after reset */
+	{ "wan_addget",			"0"				, 0 },
 	{ "wan_weight",			"1"				, 0 },
 #ifdef TCONFIG_USB
 	{ "wan_hilink_ip",		"0.0.0.0"			, 0 },
@@ -229,6 +231,7 @@ struct nvram_tuple router_defaults[] = {
 	{ "wan2_gateway",		"0.0.0.0"			, 0 },	/* WAN gateway */
 	{ "wan2_dns",			""				, 0 },	/* x.x.x.x x.x.x.x ... */
 	{ "wan2_dns_auto",		"1"				, 0 },	/* wan2 auto dns to 1 after reset */
+	{ "wan2_addget",		"0"				, 0 },
 	{ "wan2_weight",		"1"				, 0 },
 	{ "wan2_hwname",		""				, 0 },	/* WAN driver name (e.g. et1) */
 	{ "wan2_hwaddr",		""				, 0 },	/* WAN interface MAC address */
@@ -249,6 +252,7 @@ struct nvram_tuple router_defaults[] = {
 	{ "wan3_gateway",		"0.0.0.0"			, 0 },	/* WAN gateway */
 	{ "wan3_dns",			""				, 0 },	/* x.x.x.x x.x.x.x ... */
 	{ "wan3_dns_auto",		"1"				, 0 },	/* wan3 auto dns to 1 after reset */
+	{ "wan3_addget",		"0"				, 0 },
 	{ "wan3_weight",		"1"				, 0 },
 	{ "wan3_hwname",		""				, 0 },	/* WAN driver name (e.g. et1) */
 	{ "wan3_hwaddr",		""				, 0 },	/* WAN interface MAC address */
@@ -268,8 +272,9 @@ struct nvram_tuple router_defaults[] = {
 	{ "wan4_gateway",		"0.0.0.0"			, 0 },	/* WAN gateway */
 	{ "wan4_dns",			""				, 0 },	/* x.x.x.x x.x.x.x ... */
 	{ "wan4_dns_auto",		"1"				, 0 },	/* wan4 auto dns to 1 after reset */
+	{ "wan4_addget",		"0"				, 0 },
 	{ "wan4_weight",		"1"				, 0 },
-	{ "wan4_hwname"			""				, 0 },	/* WAN driver name (e.g. et1) */
+	{ "wan4_hwname",		""				, 0 },	/* WAN driver name (e.g. et1) */
 	{ "wan4_hwaddr",		""				, 0 },	/* WAN interface MAC address */
 	{ "wan4_iface",			""				, 0 },
 	{ "wan4_ifname",		""				, 0 },
@@ -329,7 +334,6 @@ struct nvram_tuple router_defaults[] = {
 	{ "dhcp_lease",			"1440"				, 0 },	/* LAN lease time in minutes */
 	{ "dhcp_moveip",		"0"				, 0 },	/* GUI helper for automatic IP change */
 	{ "dhcp_domain",		"wan"				, 0 },	/* Use WAN domain name first if available (wan|lan) */
-	{ "wan_get_dns",		""				, 0 },	/* DNS IP address which get by dhcpc */
 	{ "wan_routes",			""				, 0 },
 	{ "wan_msroutes",		""				, 0 },
 
@@ -808,12 +812,46 @@ struct nvram_tuple router_defaults[] = {
 /* basic-ddns */
 	{ "ddnsx0",			""				, 0 },
 	{ "ddnsx1",			""				, 0 },
-	{ "ddnsx_ip",			"wan"				, 0 },
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2",			""				, 0 },
+	{ "ddnsx3",			""				, 0 },
+#endif
+	{ "ddnsx0_ip",			"wan"				, 0 },
+	{ "ddnsx1_ip",			"wan"				, 0 },
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2_ip",			"wan"				, 0 },
+	{ "ddnsx3_ip",			"wan"				, 0 },
+#endif
 	{ "ddnsx0_cache",		""				, 0 },
 	{ "ddnsx1_cache",		""				, 0 },
-	{ "ddnsx_save",			"1"				, 0 },
-	{ "ddnsx_refresh",		"28"				, 0 },
-	{ "ddnsx_cktime",		"10"				, 0 },
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2_cache",		""				, 0 },
+	{ "ddnsx3_cache",		""				, 0 },
+#endif
+	{ "ddnsx0_save",		"1"				, 0 },
+	{ "ddnsx1_save",		"1"				, 0 },
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2_save",		"1"				, 0 },
+	{ "ddnsx3_save",		"1"				, 0 },
+#endif
+	{ "ddnsx0_refresh",		"28"				, 0 },
+	{ "ddnsx1_refresh",		"28"				, 0 },
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2_refresh",		"28"				, 0 },
+	{ "ddnsx3_refresh",		"28"				, 0 },
+#endif
+	{ "ddnsx0_cktime",		"10"				, 0 },
+	{ "ddnsx1_cktime",		"10"				, 0 },
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2_cktime",		"10"				, 0 },
+	{ "ddnsx3_cktime",		"10"				, 0 },
+#endif
+	{ "ddnsx0_opendns",		"0"				, 0 },	/* enable opendns as DNS for Dynamic DNS Client 1: bit 0 = WAN0, bit 1 = WAN1, bit 2 = WAN2, bit 3 = WAN3 */
+	{ "ddnsx1_opendns",		"0"				, 0 },	/* enable opendns as DNS for Dynamic DNS Client 2: bit 0 = WAN0, bit 1 = WAN1, bit 2 = WAN2, bit 3 = WAN3 */
+#if !defined(TCONFIG_NVRAM_32K) && !defined(TCONFIG_OPTIMIZE_SIZE)
+	{ "ddnsx2_opendns",		"0"				, 0 },	/* enable opendns as DNS for Dynamic DNS Client 3: bit 0 = WAN0, bit 1 = WAN1, bit 2 = WAN2, bit 3 = WAN3 */
+	{ "ddnsx3_opendns",		"0"				, 0 },	/* enable opendns as DNS for Dynamic DNS Client 4: bit 0 = WAN0, bit 1 = WAN1, bit 2 = WAN2, bit 3 = WAN3 */
+#endif
 
 /* basic-ident */
 	{ "router_name",		"FreshTomato"			, 0 },
@@ -889,7 +927,6 @@ struct nvram_tuple router_defaults[] = {
 	{ "dhcpd_slt",			"0"				, 0 },
 	{ "dhcpd_gwmode",		""				, 0 },
 	{ "dhcpd_lmax",			""				, 0 },
-	{ "dns_addget",			"0"				, 0 },
 	{ "dns_intcpt",			"0"				, 0 },
 	{ "dhcpc_minpkt",		"1"				, 0 },
 	{ "dhcpc_custom",		""				, 0 },
@@ -951,7 +988,8 @@ struct nvram_tuple router_defaults[] = {
 
 /* advanced-routing */
 	{ "routes_static",		""				, 0 },
-	{ "dhcp_routes",		"1"				, 0 },
+	{ "dhcpc_33",			"1"				, 0 },	/* DHCP Static Route (option 33) */
+	{ "dhcpc_121",			"1"				, 0 },	/* DHCP Classless Static Route (option 121) */
 	{ "force_igmpv2",		"0"				, 0 },
 #ifdef TCONFIG_ZEBRA
 	{ "dr_setting",			"0"				, 0 },	/* [ Disable | WAN | LAN | Both ] */
@@ -1087,6 +1125,10 @@ struct nvram_tuple router_defaults[] = {
 	{ "http_wanport",		"8080"				, 0 },	/* WAN port to listen on */
 	{ "http_lanport",		"80"				, 0 },	/* LAN port to listen on */
 	{ "http_enable",		"1"				, 0 },	/* HTTP server enable/disable */
+	{ "http_lan_listeners",		"7"				, 0 },	/* Enable listeners: bit 0 = LAN1, bit 1 = LAN2, bit 2 = LAN3 */
+#ifdef TCONFIG_IPV6
+	{ "http_ipv6",			"1"				, 0 },	/* Start httpd on IPv6 interfaces */	
+#endif
 	{ "remote_upgrade",		"1"				, 0 },	/* allow remote upgrade [1|0] - for brave guys */
 	{ "http_wanport_bfm",		"1"				, 0 },	/* enable/disable brute force mitigation rule for WAN port */
 #ifdef TCONFIG_HTTPS
@@ -1213,6 +1255,9 @@ struct nvram_tuple router_defaults[] = {
 	{ "t_hidelr",			"0"				, 0 },
 	{ "debug_clkfix",		"1"				, 0 },
 	{ "debug_ddns",			"0"				, 0 },
+#ifdef TCONFIG_BCM714
+	{ "debug_wlx_shdown",		"0"				, 0 },	/* Shutdown wl radio eth1 (bit 0) and/or eth2 (bit 1) and/or eth3 (bit 2) */
+#endif /* TCONFIG_BCM714 */
 	{ "http_nocache",		"0"				, 0 },
 
 /* admin-cifs */
@@ -1295,7 +1340,6 @@ struct nvram_tuple router_defaults[] = {
 	{ "script_usbmount",		""				, 0 },
 	{ "script_usbumount",		""				, 0 },
 	{ "idle_enable",		"0"				, 0 },
-	{ "usb_3g",			"1"				, 0 },
 #endif /* TCONFIG_USB */
 
 #ifdef TCONFIG_FTP

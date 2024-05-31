@@ -605,6 +605,7 @@ static int get_scan_results(int idx, int unit, int subunit, void *param)
 	struct bss_ie_hdr *ie;
 	int r, retry;
 	int chan_bw;
+	char *c, ssid_buffer[36];
 #ifdef CONFIG_BCMWL6
 	int chanspec = 0, ctr_channel = 0;
 #endif
@@ -682,6 +683,7 @@ static int get_scan_results(int idx, int unit, int subunit, void *param)
 		/* add/copy extended infos for FreshTomato */
 		apinfos_ext[ap_count].RSSI = bssi->RSSI;
 		apinfos_ext[ap_count].chanspec = bssi->chanspec;
+		apinfos_ext[ap_count].nbss_cap = bssi->nbss_cap;
 
 		if (bssi->RSSI >= -50)
 			apinfos[ap_count].RSSI_Quality = 100;
@@ -794,9 +796,21 @@ next_info:
 		else
 			chan_bw = 10;
 #endif
+
+		c = NULL;  /* reset */
+		/* check SSID for single quote (avoid breaking GUI wireless survey) */
+		if ((c = strchr(apinfos[i].SSID, '\'')) != NULL) {
+			int len_first_part = strlen(apinfos[i].SSID) - strlen(c);
+
+			memset(ssid_buffer, 0, sizeof(ssid_buffer)); /* reset */
+			strlcpy(ssid_buffer, apinfos[i].SSID, len_first_part + 1); /* copy first part */
+			strlcat(ssid_buffer, "\\", sizeof(ssid_buffer)); /* add backslash */
+			strlcat(ssid_buffer, apinfos[i].SSID + len_first_part, sizeof(ssid_buffer));
+		}
+		
 		/* note: provide/use control channel and not the actual channel because we use it for wireless survey and scan button at basic-network.asp */
 		web_printf("%c['%s','%s',%d,%d,%d,%d,", rp->comma,
-		           apinfos[i].BSSID, apinfos[i].SSID, apinfos_ext[i].RSSI, apinfos[i].ctl_ch,
+		           apinfos[i].BSSID, (c == NULL) ? apinfos[i].SSID : ssid_buffer, apinfos_ext[i].RSSI, apinfos[i].ctl_ch,
 		           chan_bw, apinfos[i].RSSI_Quality);
 		rp->comma = ',';
 
@@ -857,7 +871,41 @@ next_info:
 		else
 			web_printf("'%s',", "NONE");
 
-		web_printf("'%s']", CHSPEC_IS2G(apinfos_ext[i].chanspec) ? "2.4" : "5");
+		web_printf("'%s',%d,0x%x]", CHSPEC_IS2G(apinfos_ext[i].chanspec) ? "2.4" : "5", apinfos[i].channel, apinfos_ext[i].nbss_cap); /* add central channel AND 802.11N+AC BSS capabilities at the end of the array */
+
+		/* Array Ex.:
+		 * wlscandata = [[
+		 * 'AA:BB:CC:DD:EE:FF',	==> MAC of AP/Router/Device (BSSID)
+		 * 'SSID-Name',		==> SSID-Name
+		 * -21,			==> RSSI
+		 * 108,			==> Conrol Channel / Primary Channel
+		 * 80,			==> Bandwidth (BW)
+		 * 100,			==> RSSI Quality
+		 * '11ac',		==> Network capabilities (ac, b/g/n, etc.)
+		 * 'WPA2-Personal',	==> Security
+		 * 'AES',		==> Encryption
+		 * '5',			==> wireless band (5 GHz or 2,4 GHz)
+		 * 106,			==> Central Channel
+		 * 0x362		==> 802.11N+AC BSS capabilities
+		 * ]];
+		 *
+		 * 802.11N+AC BSS capabilities Ex.:
+		 * 0x362 (HEX)
+		 *  VHT   HT   HT
+		 * 0011 0110 0010 (BIN)
+		 * |||| |||| ||||--> 0 / not reported
+		 * |||| |||| |||---> HT_CAP_40MHZ (FALSE: 20Mhz, TRUE: 20/40MHZ supported)
+		 * |||| |||| ||----> 0 / not reported
+		 * |||| |||| |-----> 0 / not reported
+		 * |||| ||||-------> 0 / not reported
+		 * |||| |||--------> HT_CAP_SHORT_GI_20
+		 * |||| ||---------> HT_CAP_SHORT_GI_40
+		 * |||| |----------> 0 / not reported
+		 * ||||------------> VHT_BI_SGI_80MHZ
+		 * |||-------------> VHT_BI_80MHZ
+		 * ||--------------> VHT_BI_160MHZ
+		 * |---------------> VHT_BI_8080MHZ
+		 */
 	}
 	free(results);
 
@@ -1466,8 +1514,14 @@ void asp_wlcountries(int argc, char **argv)
 	wl_country_list_t *cl = (wl_country_list_t *)malloc(WLC_IOCTL_MAXLEN + WLC_IOCTL_MAXLEN_ADDON);
 	cntry_name_t *cntry = NULL;
 	char *abbrev = NULL;
-	char *ifname = (strcmp(nvram_safe_get("wl_ifname"),"") != 0) ? nvram_safe_get("wl_ifname") : "eth1"; /* keep it easy - take the first interface */
 	int band = WLC_BAND_ALL; /* all bands == 3 */
+	char *ifname = NULL;
+
+#ifdef TCONFIG_AC5300
+	ifname = (strcmp(nvram_safe_get("wl0_ifname"),"") != 0) ? nvram_safe_get("wl0_ifname") : ((strcmp(nvram_safe_get("wl1_ifname"),"") != 0) ? nvram_safe_get("wl1_ifname") : "eth3"); /* take the first interface available */
+#else
+	ifname = (strcmp(nvram_safe_get("wl_ifname"),"") != 0) ? nvram_safe_get("wl_ifname") : "eth1"; /* keep it easy - take the first interface */
+#endif /* TCONFIG_AC5300 */
 
 	web_puts("\nwl_countries = [");
 

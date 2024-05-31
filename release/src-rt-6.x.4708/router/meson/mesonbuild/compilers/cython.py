@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2021 Intel Corporation
+from __future__ import annotations
 
 """Abstraction for Cython language compilers."""
 
 import typing as T
 
 from .. import coredata
-from ..mesonlib import EnvironmentException, OptionKey
+from ..mesonlib import EnvironmentException, OptionKey, version_compare
 from .compilers import Compiler
 
 if T.TYPE_CHECKING:
@@ -39,15 +40,19 @@ class CythonCompiler(Compiler):
         # compiler might though
         return []
 
+    def get_dependency_gen_args(self, outtarget: str, outfile: str) -> T.List[str]:
+        if version_compare(self.version, '>=0.29.33'):
+            return ['-M']
+        return []
+
+    def get_depfile_suffix(self) -> str:
+        return 'dep'
+
     def sanity_check(self, work_dir: str, environment: 'Environment') -> None:
         code = 'print("hello world")'
         with self.cached_compile(code, environment.coredata) as p:
             if p.returncode != 0:
                 raise EnvironmentException(f'Cython compiler {self.id!r} cannot compile programs')
-
-    def get_buildtype_args(self, buildtype: str) -> T.List[str]:
-        # Cython doesn't implement this, but Meson requires an implementation
-        return []
 
     def get_pic_args(self) -> T.List[str]:
         # We can lie here, it's fine

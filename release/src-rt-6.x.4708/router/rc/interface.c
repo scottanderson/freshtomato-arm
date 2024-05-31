@@ -52,7 +52,7 @@ int _ifconfig(const char *name, int flags, const char *addr, const char *netmask
 	struct ifreq ifr;
 	struct in_addr in_addr, in_netmask, in_broadaddr;
 
-	logmsg(LOG_DEBUG, "*** %s: name=%s flags=%04x %s addr=%s netmask=%s mtu=%d\n", __FUNCTION__, name ? : "", flags, (flags & IFUP) ? "IFUP" : "", addr ? : "", netmask ? : "", mtu ? : 0);
+	logmsg(LOG_DEBUG, "*** %s: name=[%s] flags=[%04x] %s addr=[%s] netmask=[%s] mtu=[%d]", __FUNCTION__, name ? : "", flags, (flags & IFUP) ? "IFUP" : "", addr ? : "", netmask ? : "", mtu ? : 0);
 
 	if (!name)
 		return -1;
@@ -135,7 +135,7 @@ static int route_manip(int cmd, char *name, int metric, char *dst, char *gateway
 	int s, err = 0;
 	struct rtentry rt;
 
-	logmsg(LOG_DEBUG, "*** %s: cmd=%s name=%s addr=%s netmask=%s gateway=%s metric=%d\n", __FUNCTION__, cmd == SIOCADDRT ? "ADD" : "DEL", name, dst, genmask, gateway, metric);
+	logmsg(LOG_DEBUG, "*** %s: cmd=[%s] name=[%s] addr=[%s] netmask=[%s] gateway=[%s] metric=[%d]", __FUNCTION__, cmd == SIOCADDRT ? "ADD" : "DEL", name, dst, genmask, gateway, metric);
 
 	/* open a raw socket to the kernel */
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -143,12 +143,14 @@ static int route_manip(int cmd, char *name, int metric, char *dst, char *gateway
 
 	/* fill in rtentry */
 	memset(&rt, 0, sizeof(rt));
-	if (dst)
+	if (dst && *dst)
 		inet_aton(dst, &sin_addr(&rt.rt_dst));
-	if (gateway)
+	if (gateway && *gateway)
 		inet_aton(gateway, &sin_addr(&rt.rt_gateway));
-	if (genmask)
+	if (genmask && *genmask)
 		inet_aton(genmask, &sin_addr(&rt.rt_genmask));
+	if (name && *name)
+		rt.rt_dev = name;
 
 	rt.rt_metric = metric;
 	rt.rt_flags = RTF_UP;
@@ -156,8 +158,6 @@ static int route_manip(int cmd, char *name, int metric, char *dst, char *gateway
 		rt.rt_flags |= RTF_GATEWAY;
 	if (sin_addr(&rt.rt_genmask).s_addr == INADDR_BROADCAST)
 		rt.rt_flags |= RTF_HOST;
-
-	rt.rt_dev = name;
 
 	/* force address family to AF_INET */
 	rt.rt_dst.sa_family = AF_INET;
@@ -182,7 +182,7 @@ int route_add(char *name, int metric, char *dst, char *gateway, char *genmask)
 
 void route_del(char *name, int metric, char *dst, char *gateway, char *genmask)
 {
-	while (route_manip(SIOCDELRT, name, (metric + 1), dst, gateway, genmask) == 0) {
+	while (route_manip(SIOCDELRT, name, (metric + 1), dst, gateway, genmask) == 0) { /* del all! */
 		//
 	}
 }

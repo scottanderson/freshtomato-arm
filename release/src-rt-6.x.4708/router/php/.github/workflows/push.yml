@@ -2,7 +2,7 @@ name: Push
 on:
   push:
     paths-ignore:
-      - docs/*
+      - docs/**
       - NEWS
       - UPGRADING
       - UPGRADING.INTERNALS
@@ -11,8 +11,8 @@ on:
       - CODING_STANDARDS.md
       - .cirrus.yml
       - .travis.yml
-      - travis/*
-      - .circleci/*
+      - travis/**
+      - .circleci/**
     branches:
       - PHP-7.4
       - PHP-8.0
@@ -22,7 +22,7 @@ on:
       - master
   pull_request:
     paths-ignore:
-      - docs/*
+      - docs/**
       - NEWS
       - UPGRADING
       - UPGRADING.INTERNALS
@@ -31,8 +31,8 @@ on:
       - CODING_STANDARDS.md
       - .cirrus.yml
       - .travis.yml
-      - travis/*
-      - .circleci/*
+      - travis/**
+      - .circleci/**
     branches:
       - '**'
 permissions:
@@ -45,6 +45,7 @@ env:
   CXX: ccache g++
 jobs:
   LINUX_X64:
+    if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
     services:
       mysql:
         image: mysql:8
@@ -72,7 +73,7 @@ jobs:
             zts: true
             asan: true
     name: "LINUX_X64_${{ matrix.debug && 'DEBUG' || 'RELEASE' }}_${{ matrix.zts && 'ZTS' || 'NTS' }}${{ matrix.asan && '_ASAN' || '' }}"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-${{ !matrix.asan && '22' || '20' }}.04
     container:
       image: ${{ matrix.asan && 'ubuntu:23.04' || null }}
     steps:
@@ -137,6 +138,7 @@ jobs:
         if: ${{ !matrix.asan }}
         uses: ./.github/actions/verify-generated-files
   MACOS_DEBUG_NTS:
+    if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
     runs-on: macos-12
     steps:
       - name: git checkout
@@ -170,6 +172,7 @@ jobs:
       - name: Verify generated files are up to date
         uses: ./.github/actions/verify-generated-files
   WINDOWS:
+    if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
     name: WINDOWS_X64_ZTS
     runs-on: windows-2019
     env:
@@ -196,7 +199,7 @@ jobs:
         run: .github/scripts/windows/test.bat
   BENCHMARKING:
     name: BENCHMARKING
-    if: github.repository_owner == 'php' || github.event_name == 'pull_request'
+    if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
     runs-on: ubuntu-22.04
     steps:
       - name: git checkout

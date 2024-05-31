@@ -1,16 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2016-2021 The Meson development team
-
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import subprocess
 import re
@@ -138,7 +127,7 @@ class DarwinTests(BasePlatformTests):
 
     def test_objc_versions(self):
         # Objective-C always uses the C standard version.
-        # Objecttive-C++ always uses the C++ standard version.
+        # Objective-C++ always uses the C++ standard version.
         # This is what most people seem to want and in addition
         # it is the only setup supported by Xcode.
         testdir = os.path.join(self.objc_test_dir, '1 simple')
@@ -148,3 +137,8 @@ class DarwinTests(BasePlatformTests):
         testdir = os.path.join(self.objcpp_test_dir, '1 simple')
         self.init(testdir)
         self.assertIn('-std=c++14', self.get_compdb()[0]['command'])
+
+    def test_darwin_get_object_archs(self):
+        from mesonbuild.mesonlib import darwin_get_object_archs
+        archs = darwin_get_object_archs('/bin/cat')
+        self.assertEqual(archs, ['x86_64', 'aarch64'])
