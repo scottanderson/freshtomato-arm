@@ -12,10 +12,10 @@
 <meta http-equiv="content-type" content="text/html;charset=utf-8">
 <meta name="robots" content="noindex,nofollow">
 <title>[<% ident(); %>] Basic: DDNS Client</title>
-<link rel="stylesheet" type="text/css" href="tomato.css">
+<link rel="stylesheet" type="text/css" href="tomato.css?rel=<% version(); %>">
 <% css(); %>
-<script src="isup.jsz"></script>
-<script src="tomato.js"></script>
+<script src="isup.jsz?rel=<% version(); %>"></script>
+<script src="tomato.js?rel=<% version(); %>"></script>
 
 <script>
 
@@ -164,6 +164,7 @@ function verifyFields(focused, quiet) {
 	var op;
 	var enabled;
 	var used_wans = [0, 0, 0, 0];
+	var count_enabled_wans = 0;
 	var txt = 'not available when <a href="advanced-dhcpdns.asp">\'Use received DNS with user-entered DNS\'<\/a> is enabled';
 
 	/* prepare used_wans[] array */
@@ -174,6 +175,8 @@ function verifyFields(focused, quiet) {
 				used_wans[j - 1]++;
 			if (!E('_f_opendns'+i).checked) /* otherwise, uncheck WANx */
 				E('_f_opendns'+i+'_wan'+k).checked = 0;
+			if (nvram['wan'+k+'_proto'] != 'disabled')
+				count_enabled_wans++;
 		}
 	}
 
@@ -311,10 +314,16 @@ function verifyFields(focused, quiet) {
 			l = j - 1;
 			/* disable/unselect the dropdown item for which WAN is disabled */
 			if (nvram['wan'+k+'_proto'] == 'disabled') {
-				E('_f_ddnsx'+i+'_wanip')[l].disabled = 1;
-				E('_f_ddnsx'+i+'_wanip')[l].selected = 0;
-				E('_f_ddnsx'+i+'_wanip')[l + MAXWAN_NUM].disabled = 1;
-				E('_f_ddnsx'+i+'_wanip')[l + MAXWAN_NUM].selected = 0;
+				if (count_enabled_wans == 0 && l == 0) { /* device is configured with no WAN */
+					E('_f_ddnsx'+i+'_wanip')[MAXWAN_NUM].disabled = 0;
+					E('_f_ddnsx'+i+'_wanip')[MAXWAN_NUM].text = 'External address checker';
+				}
+				else {
+					E('_f_ddnsx'+i+'_wanip')[l].disabled = 1;
+					E('_f_ddnsx'+i+'_wanip')[l].selected = 0;
+					E('_f_ddnsx'+i+'_wanip')[l + MAXWAN_NUM].disabled = 1;
+					E('_f_ddnsx'+i+'_wanip')[l + MAXWAN_NUM].selected = 0;
+				}
 			}
 			else {
 				E('_f_ddnsx'+i+'_wanip')[l].disabled = 0;
@@ -574,29 +583,6 @@ function init() {
 	for (i = 0; i < clients_num; ++i) {
 		W('<div class="section-title">Dynamic DNS Client '+(i + 1)+'<\/div><div class="section">');
 
-		s = eval('ddnsx'+i+'_ip_get');
-		a = (s != '') && (s != 'wan') && (s != 'wan2')
-/* MULTIWAN-BEGIN */
-		    && (s != 'wan3') && (s != 'wan4')
-/* MULTIWAN-END */
-		    && (s.indexOf('@') != 0) && (s != '0.0.0.0') && (s != '10.1.1.1');
-
-		createFieldTable('', [
-			{ title: 'IP address', multi: [
-				{ name: 'f_ddnsx'+i+'_wanip', type: 'select', options: [['wan','Use WAN0 IP Address'],['wan2','Use WAN1 IP Address' ],
-/* MULTIWAN-BEGIN */
-					['wan3','Use WAN2 IP Address' ],['wan4','Use WAN3 IP Address' ],
-/* MULTIWAN-END */
-					['@1','External WAN0 IP address checker'],['@2','External WAN1 IP address checker'],
-/* MULTIWAN-BEGIN */
-					['@3','External WAN2 IP address checker'],['@4','External WAN3 IP address checker'],
-/* MULTIWAN-END */
-					['0.0.0.0','Offline (0.0.0.0)'],['10.1.1.1','Offline (10.1.1.1)'],['custom','Custom IP Address...']], value: (a ? 'custom' : s) },
-				{ name: 'f_ddnsx'+i+'_cktime', type: 'text', maxlen: 5, size: 6, prefix: '<span id="nsx_'+i+'_cktime"><span id="note_cktime1_'+i+'">every:<\/span>', suffix: '<span id="note_cktime2_'+i+'">minutes (range: 5 - 99999, default: 10)<\/span><\/span>', value: nvram['ddnsx'+i+'_cktime'] } ] },
-				{ title: 'Custom IP address', indent: 2, name: 'f_custom_ip'+i, type: 'text', maxlen: 15, size: 20, value: (a ? s : ''), hidden: !a },
-			{ title: 'Auto refresh every', name: 'ddnsx'+i+'_refresh', type: 'text', maxlen: 8, size: 8, suffix: '<small> days (0 - disable)<\/small>', value: fixInt(nvram['ddnsx'+i+'_refresh'], 0, 90, 28) }
-		]);
-
 		/* check if correct */
 		v = nvram['ddnsx'+i].split('<');
 		if (v.length != 7)
@@ -630,10 +616,36 @@ function init() {
 			{ title: 'Token', name: 'f_token'+i, type: 'text', maxlen: 255, size: 80, value: v[6], hidden: 1 },
 			{ title: 'Save state when IP changes (nvram commit)', name: 'f_ddnsx'+i+'_save', type: 'checkbox', value: nvram['ddnsx'+i+'_save'] == 1, hidden: 1 },
 			{ title: 'Force next update', name: 'f_force'+i, type: 'checkbox', value: 0, hidden: 1 },
+			null
+		]);
+
+		s = eval('ddnsx'+i+'_ip_get');
+		a = (s != '') && (s != 'wan') && (s != 'wan2')
+/* MULTIWAN-BEGIN */
+		    && (s != 'wan3') && (s != 'wan4')
+/* MULTIWAN-END */
+		    && (s.indexOf('@') != 0) && (s != '0.0.0.0') && (s != '10.1.1.1');
+
+		createFieldTable('', [
+			{ title: 'IP address', multi: [
+				{ name: 'f_ddnsx'+i+'_wanip', type: 'select', options: [['wan','Use WAN0 IP Address'],['wan2','Use WAN1 IP Address' ],
+/* MULTIWAN-BEGIN */
+					['wan3','Use WAN2 IP Address' ],['wan4','Use WAN3 IP Address' ],
+/* MULTIWAN-END */
+					['@1','External WAN0 IP address checker'],['@2','External WAN1 IP address checker'],
+/* MULTIWAN-BEGIN */
+					['@3','External WAN2 IP address checker'],['@4','External WAN3 IP address checker'],
+/* MULTIWAN-END */
+					['0.0.0.0','Offline (0.0.0.0)'],['10.1.1.1','Offline (10.1.1.1)'],['custom','Custom IP Address...']], value: (a ? 'custom' : s) },
+				{ name: 'f_ddnsx'+i+'_cktime', type: 'text', maxlen: 5, size: 6, prefix: '<span id="nsx_'+i+'_cktime"><span id="note_cktime1_'+i+'">every:<\/span>', suffix: '<span id="note_cktime2_'+i+'">minutes (range: 5 - 99999, default: 10)<\/span><\/span>', value: nvram['ddnsx'+i+'_cktime'] } ] },
+				{ title: 'Custom IP address', indent: 2, name: 'f_custom_ip'+i, type: 'text', maxlen: 15, size: 20, value: (a ? s : ''), hidden: !a },
+			{ title: 'Auto refresh every', name: 'ddnsx'+i+'_refresh', type: 'text', maxlen: 8, size: 8, suffix: '<small> days (0 - disable)<\/small>', value: fixInt(nvram['ddnsx'+i+'_refresh'], 0, 90, 28) },
+
 			null,
 			{ title: 'Last IP Address', custom: '<span id="str-update'+i+'"><\/span>', rid: 'last-update'+i, hidden: 1 },
 			{ title: 'Last Result', custom: '<span id="str-response'+i+'"><\/span>', rid: 'last-response'+i, hidden: h }
 		]);
+
 		W('<\/div>');
 	}
 

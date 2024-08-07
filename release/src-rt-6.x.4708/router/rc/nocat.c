@@ -28,6 +28,9 @@ void build_nocat_conf(void)
 {
 	FILE *fp;
 	char *p;
+	char *lanX_ifname;
+	char *lanX_ipaddr;
+	int i;
 
 	if (!(fp = fopen(NOCAT_CONF, "w"))) {
 		logerr(__FUNCTION__, __LINE__, NOCAT_CONF);
@@ -44,22 +47,23 @@ void build_nocat_conf(void)
 	            nvram_safe_get("wan_iface"),
 	            "1");
 
-	if (nvram_match("NC_BridgeLAN", "br0"))
-		fprintf(fp, "InternalDevice\t%s\n"
-		            "GatewayAddr\t%s\n", nvram_safe_get("lan_ifname"), nvram_safe_get("lan_ipaddr"));
+	for (i = 0 ; i < BRIDGE_COUNT; i++) {
+		char buffer[16];
+		snprintf(buffer, sizeof(buffer),"br%d", i);
 
-	if (nvram_match("NC_BridgeLAN", "br1"))
-		fprintf(fp, "InternalDevice\t%s\n"
-		            "GatewayAddr\t%s\n", nvram_safe_get("lan1_ifname"), nvram_safe_get("lan1_ipaddr"));
+		if (nvram_match("NC_BridgeLAN", buffer)) {
+			snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ifname" : "lan%d_ifname"), i);
+			lanX_ifname = nvram_safe_get(buffer);
 
-	if (nvram_match("NC_BridgeLAN", "br2"))
-		fprintf(fp, "InternalDevice\t%s\n"
-		            "GatewayAddr\t%s\n", nvram_safe_get("lan2_ifname"), nvram_safe_get("lan2_ipaddr"));
+			snprintf(buffer, sizeof(buffer), (i == 0 ? "lan_ipaddr" : "lan%d_ipaddr"), i);
+			lanX_ipaddr = nvram_safe_get(buffer);
 
-	if (nvram_match("NC_BridgeLAN", "br3"))
-		fprintf(fp, "InternalDevice\t%s\n"
-		            "GatewayAddr\t%s\n", nvram_safe_get("lan3_ifname"), nvram_safe_get("lan3_ipaddr"));
+			fprintf(fp, "InternalDevice\t%s\n"
+			            "GatewayAddr\t%s\n", lanX_ifname, lanX_ipaddr);
 
+			break;
+		}
+	}
 
 	fprintf(fp, "GatewayMAC\t%s\n", nvram_safe_get("lan_hwaddr"));
 
@@ -111,8 +115,7 @@ void build_nocat_conf(void)
 	            NOCAT_SCRIPTS,
 	            nvram_safe_get("NC_ExcludePorts"),
 	            nvram_safe_get("NC_IncludePorts"),
-	            nvram_safe_get("lan_ipaddr"),
-	            nvram_safe_get("NC_AllowedWebHosts"),
+	            nvram_safe_get("lan_ipaddr"), nvram_safe_get("NC_AllowedWebHosts"),
 	            nvram_safe_get("NC_MACWhiteList"),
 	            "1",
 	            nvram_safe_get("NC_HomePage"),
@@ -198,11 +201,12 @@ void start_nocat(void)
 	            "LOGGER=\"logger -t splashd\"\n"
 	            "LOCK_FILE="NOCAT_LOCKFILE"\n"
 	            "if [ -f $LOCK_FILE ]; then\n"
-	            "	$LOGGER \"Captive Portal halted (0), other process starting\"\n"
-	            "	exit\n"
+	            " $LOGGER \"Captive Portal halted (0), other process starting\"\n"
+	            " exit\n"
 	            "fi\n"
 	            "echo \"FRESHTOMATO\" > $LOCK_FILE\n"
 	            "sleep 20\n"
+	            "[ -f "NOCAT_LEASES" ] || touch "NOCAT_LEASES"\n"
 	            "$LOGGER \"Captive Portal Splash Daemon started\"\n"
 	            "echo 1 > /proc/sys/net/ipv4/tcp_tw_reuse\n"
 	            "/usr/sbin/splashd >> "NOCAT_LOGFILE" 2>&1 &\n"

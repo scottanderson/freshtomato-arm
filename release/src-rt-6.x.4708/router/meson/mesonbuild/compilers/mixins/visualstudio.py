@@ -204,10 +204,10 @@ class VisualStudioLikeCompiler(Compiler, metaclass=abc.ABCMeta):
         objname = os.path.splitext(source)[0] + '.obj'
         return objname, ['/Yc' + header, '/Fp' + pchname, '/Fo' + objname]
 
-    def openmp_flags(self) -> T.List[str]:
+    def openmp_flags(self, env: Environment) -> T.List[str]:
         return ['/openmp']
 
-    def openmp_link_flags(self) -> T.List[str]:
+    def openmp_link_flags(self, env: Environment) -> T.List[str]:
         return []
 
     # FIXME, no idea what these should be.
@@ -460,6 +460,18 @@ class ClangClCompiler(VisualStudioLikeCompiler):
             path = '.'
         return ['/clang:-isystem' + path] if is_system else ['-I' + path]
 
+    @classmethod
+    def use_linker_args(cls, linker: str, version: str) -> T.List[str]:
+        # Clang additionally can use a linker specified as a path, unlike MSVC.
+        if linker == 'lld-link':
+            return ['-fuse-ld=lld-link']
+        return super().use_linker_args(linker, version)
+
+    def linker_to_compiler_args(self, args: T.List[str]) -> T.List[str]:
+        # clang-cl forwards arguments span-wise with the /LINK flag
+        # therefore -Wl will be received by lld-link or LINK and rejected
+        return super().use_linker_args(self.linker.id, '') + super().linker_to_compiler_args([flag[4:] if flag.startswith('-Wl,') else flag for flag in args])
+
     def get_dependency_compile_args(self, dep: 'Dependency') -> T.List[str]:
         if dep.get_include_type() == 'system':
             converted: T.List[str] = []
@@ -471,3 +483,10 @@ class ClangClCompiler(VisualStudioLikeCompiler):
             return converted
         else:
             return dep.get_compile_args()
+
+    def openmp_link_flags(self, env: Environment) -> T.List[str]:
+        # see https://github.com/mesonbuild/meson/issues/5298
+        libs = self.find_library('libomp', env, [])
+        if libs is None:
+            raise mesonlib.MesonBugException('Could not find libomp')
+        return super().openmp_link_flags(env) + libs

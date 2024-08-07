@@ -60,13 +60,8 @@ config TCONFIG_L7PAT
 	depends on TCONFIG_L7
 	default y
 
-config TCONFIG_LZO
-	bool "LZO Compression"
-	default n
-
 config TCONFIG_OPENVPN
 	bool "OpenVPN"
-	depends on TCONFIG_LZO
 	default n
 
 config TCONFIG_WIREGUARD
@@ -333,12 +328,20 @@ config TCONFIG_OPENSSL30
 
 config TCONFIG_OPENSSL11
 	bool "OpenSSL 1.1.x"
-	depends on !TCONFIG_OPENSSL30
+	default n
+
+config TCONFIG_WOLFSSL
+	bool "WolfSSL"
+	default n
+
+config TCONFIG_WOLFSSLMIN
+	bool "WolfSSL (lean version)"
+	depends on TCONFIG_WOLFSSL
 	default n
 
 config TCONFIG_FANCTRL
 	bool "FANCTRL"
- 	default n
+	default n
 
 config TCONFIG_IPERF
 	bool "IP Bandwidth monitoring utility"

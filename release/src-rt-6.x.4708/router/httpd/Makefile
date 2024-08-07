@@ -3,7 +3,7 @@ include ../common.mak
 CFLAGS  = -Os -Wall $(EXTRACFLAGS) -ffunction-sections -fdata-sections -Wsign-compare
 CFLAGS += -I$(SRCBASE)/include -I$(TOP)/shared -I$(TOP)/nvram$(BCMEX)
 LDFLAGS = -ffunction-sections -fdata-sections -Wl,--gc-sections -L$(TOP)/shared -L$(TOP)/nvram$(BCMEX)
-LIBS    = -lshared -lnvram $(EXTRALIBS)
+LIBS    = -lshared -lnvram -lpthread $(EXTRALIBS)
 
 ifeq ($(TCONFIG_BCMARM),y)
  CFLAGS += -I$(SRCBASE)/shared/bcmwifi/include
@@ -11,14 +11,14 @@ ifeq ($(TCONFIG_BCMARM),y)
 endif
 
 ifneq ($(TCONFIG_HTTPS),)
- CFLAGS  += -I$(TOP)/$(OPENSSLDIR)/include
- LDFLAGS += -L$(TOP)/mssl -L$(TOP)/$(OPENSSLDIR)
- LIBS    += -lmssl -lssl -lcrypto
- ifeq ($(or $(TCONFIG_OPENSSL30),$(TCONFIG_OPENSSL11)),y)
-  CFLAGS += -DUSE_OPENSSL11
-  ifeq ($(TCONFIG_BCMARM),y)
-   LIBS  += -lpthread
-  endif
+ ifeq ($(TCONFIG_WOLFSSL),y)
+  CFLAGS  += -DUSE_WOLFSSL -I$(TOP)/mssl -I$(TOP)/wolfssl/staged/usr/include -I$(TOP)/wolfssl/staged/usr/include/wolfssl -I$(TOP)/wolfssl
+  LDFLAGS += -L$(TOP)/mssl -L$(TOP)/wolfssl/staged/usr/lib
+  LIBS    += -lmssl -lwolfssl
+ else
+  CFLAGS  += -DUSE_OPENSSL -I$(TOP)/mssl -I$(TOP)/$(OPENSSLDIR)/include
+  LDFLAGS += -L$(TOP)/mssl -L$(TOP)/$(OPENSSLDIR)
+  LIBS    += -lmssl -lssl -lcrypto
  endif
 endif
 

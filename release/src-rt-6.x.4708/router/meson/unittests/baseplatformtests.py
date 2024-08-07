@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2016-2021 The Meson development team
+# Copyright © 2024 Intel Corporation
 
+from __future__ import annotations
 from pathlib import PurePath
 from unittest import mock, TestCase, SkipTest
 import json
@@ -9,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import shutil
 import tempfile
 import typing as T
 
@@ -28,7 +31,7 @@ import mesonbuild.modules.pkgconfig
 
 
 from run_tests import (
-    Backend, ensure_backend_detects_changes, get_backend_commands,
+    Backend, get_backend_commands,
     get_builddir_target_args, get_meson_script, run_configure_inprocess,
     run_mtest_inprocess, handle_meson_skip_test,
 )
@@ -75,6 +78,7 @@ class BasePlatformTests(TestCase):
         self.linuxlike_test_dir = os.path.join(src_root, 'test cases/linuxlike')
         self.objc_test_dir = os.path.join(src_root, 'test cases/objc')
         self.objcpp_test_dir = os.path.join(src_root, 'test cases/objcpp')
+        self.darwin_test_dir = os.path.join(src_root, 'test cases/darwin')
 
         # Misc stuff
         self.orig_env = os.environ.copy()
@@ -286,11 +290,11 @@ class BasePlatformTests(TestCase):
         '''
         return self.build(target=target, override_envvars=override_envvars)
 
-    def setconf(self, arg, will_build=True):
-        if not isinstance(arg, list):
+    def setconf(self, arg: T.Sequence[str], will_build: bool = True) -> None:
+        if isinstance(arg, str):
             arg = [arg]
-        if will_build:
-            ensure_backend_detects_changes(self.backend)
+        else:
+            arg = list(arg)
         self._run(self.mconf_command + arg + [self.builddir])
 
     def getconf(self, optname: str):
@@ -304,7 +308,6 @@ class BasePlatformTests(TestCase):
         windows_proof_rmtree(self.builddir)
 
     def utime(self, f):
-        ensure_backend_detects_changes(self.backend)
         os.utime(f)
 
     def get_compdb(self):
@@ -492,3 +495,23 @@ class BasePlatformTests(TestCase):
 
     def assertLength(self, val, length):
         assert len(val) == length, f'{val} is not length {length}'
+
+    def copy_srcdir(self, srcdir: str) -> str:
+        """Copies a source tree and returns that copy.
+
+        ensures that the copied tree is deleted after running.
+
+        :param srcdir: The locaiton of the source tree to copy
+        :return: The location of the copy
+        """
+        dest = tempfile.mkdtemp()
+        self.addCleanup(windows_proof_rmtree, dest)
+
+        # shutil.copytree expects the destinatin directory to not exist, Once
+        # python 3.8 is required the `dirs_exist_ok` parameter negates the need
+        # for this
+        dest = os.path.join(dest, 'subdir')
+
+        shutil.copytree(srcdir, dest)
+
+        return dest

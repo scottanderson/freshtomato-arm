@@ -99,6 +99,14 @@ ifeq ($(ASUS_TRX),NETGEAR2)
  endif
 endif
 
+SDK7WL_DESC =
+ifeq ($(BCM7WL2020),y)
+ SDK7WL_DESC = "-WL20"
+endif
+ifeq ($(BCM7WL2021),y)
+ SDK7WL_DESC = "-WL21"
+endif
+
 -include tomato_profile.mak
 
 # This could be simpler by just using $(TOMATO_PROFILE_NAME) like it used to be,
@@ -216,7 +224,7 @@ what:
 # JFFSv1 | NO_JFFS
 # NO_CIFS NO_SSH NO_SAMBA NO_HTTPS NO_XXTP NO_LIBOPT NO_ZEBRA NOWL
 # ARM DHDAP SAMBA3 OPENVPN WIREGUARD IPV6SUPP EBTABLES NTFS UFSD MEDIASRV BBEXTRAS USBEXTRAS BCM57 SLIM NOCAT NGINX TINC CTF FANCTRL HAVEGED
-# GMAC3 DNSSEC NFS BTCLIENT BTGUI TR_EXTRAS SNMP HFS UPS DNSCRYPT STUBBY PPTPD TOR IPSEC RAID MICROSD USBAP NO_USBAPP NANO MULTIWAN OPENSSL11 OPENSSL30 PROXY
+# GMAC3 DNSSEC NFS BTCLIENT BTGUI TR_EXTRAS SNMP HFS UPS DNSCRYPT STUBBY PPTPD TOR IPSEC RAID MICROSD USBAP NO_USBAPP NANO MULTIWAN OPENSSL11 OPENSSL30 WOLFSSL WOLFSSLMIN PROXY
 # IPERF AC3200 BSD BCMSMP PROXYSTA DPSTA GRO BCMFA NAND BRCM_NAND_JFFS2 CONNTRACK_TOOL CRASH_LOG NAMESPACES MDNS IRQBALANCE ROAM NO_TRXKEY AC5300 BCM714
 
 define RouterOptions
@@ -341,8 +349,6 @@ define RouterOptions
 		echo "# TCONFIG_MULTIWAN is not set" >>$(1); \
 	fi; \
 	if [ "$(OPENVPN)" = "y" ]; then \
-		sed -i "/TCONFIG_LZO/d" $(1); \
-		echo "TCONFIG_LZO=y" >>$(1); \
 		sed -i "/# TCONFIG_OPENVPN is not set/d" $(1); \
 		echo "TCONFIG_OPENVPN=y" >>$(1); \
 		sed -i "/TCONFIG_FTP_SSL/d" $(1); \
@@ -533,6 +539,13 @@ define RouterOptions
 		sed -i "/TCONFIG_OPENSSL30/d" $(1); \
 		echo "TCONFIG_OPENSSL30=y" >>$(1); \
 	fi; \
+	if [ "$(WOLFSSL)" = "y" ]; then \
+		sed -i "s/# TCONFIG_WOLFSSL is not set/TCONFIG_WOLFSSL=y/g" $(1); \
+	fi; \
+	if [ "$(WOLFSSLMIN)" = "y" ]; then \
+		sed -i "s/# TCONFIG_WOLFSSL is not set/TCONFIG_WOLFSSL=y/g" $(1); \
+		sed -i "s/# TCONFIG_WOLFSSLMIN is not set/TCONFIG_WOLFSSLMIN=y/g" $(1); \
+	fi; \
 	if [ "$(FANCTRL)" = "y" ]; then \
 		sed -i "/TCONFIG_FANCTRL/d" $(1); \
 		echo "TCONFIG_FANCTRL=y" >>$(1); \
@@ -707,6 +720,18 @@ define extrawlConfig
 		cp -f $(SRCBASE)/router/dpsta/arm/dpsta.h $(SRCBASE)/router/dpsta/dpsta.h ; \
 		cp -f $(SRCBASE)/router/dpsta/arm/dpsta_linux.h $(SRCBASE)/router/dpsta/dpsta_linux.h ; \
 		cp -f $(SRCBASE)/router/dpsta/arm/dpsta.o $(SRCBASE)/router/dpsta/linux/dpsta.o ; \
+		if [ "$(CONFIG_BCM7)" = "y" ]; then \
+			if [ "$(BCM7WL2020)" = "y" ]; then \
+				echo "Using SDK7 WL Driver - Year 2020"; \
+				cp -f $(SRCBASE)/router/dhd/linux/2020/dhd.o $(SRCBASE)/router/dhd/linux/dhd.o ; \
+			elif [ "$(BCM7WL2021)" = "y" ]; then \
+				echo "Using SDK7 WL Driver - Year 2021"; \
+				cp -f $(SRCBASE)/router/dhd/linux/2021/dhd.o $(SRCBASE)/router/dhd/linux/dhd.o ; \
+			else \
+				echo "Using SDK7 WL Driver - Year 2023 (default)"; \
+				cp -f $(SRCBASE)/router/dhd/linux/2023/dhd.o $(SRCBASE)/router/dhd/linux/dhd.o ; \
+			fi; \
+		fi; \
 	fi; \
 	)
 endef
@@ -1126,19 +1151,19 @@ endif
 
 ## basic targets
 e:
-	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL11=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
+	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL30=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
 	     QRCODE=y STUBBY=y HAVEGED=y TINC=y BUILD_DESC="$(VPN)"
 
 o:
-	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL11=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
+	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL30=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
 	    QRCODE=y STUBBY=y HAVEGED=y DNSCRYPT=y TOR=y NFS=y BUILD_DESC="Custom"
 
 y:
-	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL11=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
+	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL30=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
 	    QRCODE=y STUBBY=y HAVEGED=y DNSCRYPT=y TOR=y NFS=y BTCLIENT=y TR_EXTRAS=y NOCAT=y TINC=y NGINX=y IPERF=y CRASH_LOG=y MDNS=y NANO=y BUILD_DESC="AIO_Lite"
 
 z:
-	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL11=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
+	@$(MAKE) bin MULTIWAN=y B=E USB="USB" IPV6SUPP=y CTF=y GRO=y PROXY=y BBEXTRAS=y USBEXTRAS=y PPTPD=y DNSSEC=y NTFS=y HFS=y EBTABLES=y OPENSSL30=y OPENVPN=y WIREGUARD=y MEDIASRV=y ROAM=y \
 	    QRCODE=y STUBBY=y HAVEGED=y DNSCRYPT=y TOR=y NFS=y BTCLIENT=y TR_EXTRAS=y NOCAT=y TINC=y NGINX=y IPERF=y CRASH_LOG=y MDNS=y NANO=y SNMP=y UPS=y ZFS=y CONNTRACK_TOOL=y NAMESPACES=y BUILD_DESC="AIO"
 
 include targets.mak
@@ -1151,7 +1176,7 @@ setprofile:
 	echo '#define TOMATO_PROFILE PROFILE_$(N)' >> router/shared/tomato_profile.h
 	echo '#define TOMATO_PROFILE_NAME "$(N)"' >> router/shared/tomato_profile.h
 	echo '#define TOMATO_BUILD_NAME "$(B)"' >> router/shared/tomato_profile.h
-	echo '#define TOMATO_BUILD_DESC "$(DESC)$(EXTRA_64KDESC)$(NOSMP_DESC)"' >> router/shared/tomato_profile.h
+	echo '#define TOMATO_BUILD_DESC "$(DESC)$(EXTRA_64KDESC)$(NOSMP_DESC)$(SDK7WL_DESC)"' >> router/shared/tomato_profile.h
 	echo '#ifndef CONFIG_NVRAM_SIZE' >> router/shared/tomato_profile.h
 	echo '#define CONFIG_NVRAM_SIZE $(NVRAM_SIZE)' >> router/shared/tomato_profile.h
 	echo '#endif' >> router/shared/tomato_profile.h
@@ -1164,7 +1189,7 @@ setprofile:
 	echo 'TOMATO_PROFILE_NAME = "$(N)"' >> tomato_profile.mak
 	echo 'TOMATO_BUILD = "$(B)"' >> tomato_profile.mak
 	echo 'TOMATO_BUILD_NAME = "$(B)"' >> tomato_profile.mak
-	echo 'TOMATO_BUILD_DESC = "$(DESC)$(EXTRA_64KDESC)$(NOSMP_DESC)"' >> tomato_profile.mak
+	echo 'TOMATO_BUILD_DESC = "$(DESC)$(EXTRA_64KDESC)$(NOSMP_DESC)$(SDK7WL_DESC)"' >> tomato_profile.mak
 	echo 'TOMATO_PROFILE_L = $(lowercase_N)' >> tomato_profile.mak
 	echo 'TOMATO_PROFILE_U = $(uppercase_N)' >> tomato_profile.mak
 	echo 'TOMATO_BUILD_USB = "$(USB)"' >> tomato_profile.mak

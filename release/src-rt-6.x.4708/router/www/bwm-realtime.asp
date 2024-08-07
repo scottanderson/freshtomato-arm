@@ -12,13 +12,13 @@
 <meta http-equiv="content-type" content="text/html;charset=utf-8">
 <meta name="robots" content="noindex,nofollow">
 <title>[<% ident(); %>] Bandwidth: Real-Time</title>
-<link rel="stylesheet" type="text/css" href="tomato.css">
+<link rel="stylesheet" type="text/css" href="tomato.css?rel=<% version(); %>">
 <% css(); %>
-<script src="tomato.js"></script>
+<script src="tomato.js?rel=<% version(); %>"></script>
 <script src="wireless.jsx?_http_id=<% nv(http_id); %>"></script>
-<script src="bwm-common.js"></script>
-<script src="bwm-hist.js"></script>
-<script src="interfaces.js"></script>
+<script src="bwm-common.js?rel=<% version(); %>"></script>
+<script src="bwm-hist.js?rel=<% version(); %>"></script>
+<script src="interfaces.js?rel=<% version(); %>"></script>
 
 <script>
 

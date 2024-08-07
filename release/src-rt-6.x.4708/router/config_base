@@ -26,7 +26,6 @@ TCONFIG_FTP=y
 TCONFIG_SAMBASRV=y
 # TCONFIG_USB_EXTRAS is not set
 # TCONFIG_NTFS is not set
-# TCONFIG_LZO is not set
 # TCONFIG_OPENVPN is not set
 # TCONFIG_WIREGUARD is not set
 # TCONFIG_ZFS is not set
@@ -55,6 +54,8 @@ TCONFIG_SAMBASRV=y
 # TCONFIG_TINC is not set
 # TCONFIG_OPENSSL11 is not set
 # TCONFIG_OPENSSL30 is not set
+# TCONFIG_WOLFSSL is not set
+# TCONFIG_WOLFSSLMIN is not set
 # TCONFIG_FANCTRL is not set
 # TCONFIG_NAND is not set
 # TCONFIG_UFSDA is not set

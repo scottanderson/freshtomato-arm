@@ -12,7 +12,7 @@
 <meta http-equiv="content-type" content="text/html;charset=utf-8">
 <meta name="robots" content="noindex,nofollow">
 <title>[<% ident(); %>] Tools: WiFi QR code generator</title>
-<link rel="stylesheet" type="text/css" href="tomato.css">
+<link rel="stylesheet" type="text/css" href="tomato.css?rel=<% version(); %>">
 <% css(); %>
 <style media="print">
 @page {
@@ -46,10 +46,10 @@
 }
 </style>
 
-<script src="tomato.js"></script>
+<script src="tomato.js?rel=<% version(); %>"></script>
 <script src="wireless.jsx?_http_id=<% nv(http_id); %>"></script>
-<script src="qrcode.js"></script>
-<script src="html5-qrcode.js"></script>
+<script src="qrcode.js?rel=<% version(); %>"></script>
+<script src="html5-qrcode.js?rel=<% version(); %>"></script>
 
 <script>
 

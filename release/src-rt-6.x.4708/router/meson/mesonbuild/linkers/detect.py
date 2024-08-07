@@ -45,7 +45,7 @@ def guess_win_linker(env: 'Environment', compiler: T.List[str], comp_class: T.Ty
         check_args = ['/logo', '--version']
     elif isinstance(comp_class.LINKER_PREFIX, str):
         check_args = [comp_class.LINKER_PREFIX + '/logo', comp_class.LINKER_PREFIX + '--version']
-    elif isinstance(comp_class.LINKER_PREFIX, list):
+    else: # list
         check_args = comp_class.LINKER_PREFIX + ['/logo'] + comp_class.LINKER_PREFIX + ['--version']
 
     check_args += env.coredata.get_external_link_args(for_machine, comp_class.language)
@@ -55,13 +55,16 @@ def guess_win_linker(env: 'Environment', compiler: T.List[str], comp_class: T.Ty
     if value is not None:
         override = comp_class.use_linker_args(value[0], comp_version)
         check_args += override
+    elif 'lld-link' in compiler:
+        override = comp_class.use_linker_args('lld-link', comp_version)
+        check_args += override
 
     if extra_args is not None:
         check_args.extend(extra_args)
 
     p, o, _ = Popen_safe(compiler + check_args)
     if 'LLD' in o.split('\n', maxsplit=1)[0]:
-        if '(compatible with GNU linkers)' in o:
+        if 'compatible with GNU linkers' in o:
             return linkers.LLVMDynamicLinker(
                 compiler, for_machine, comp_class.LINKER_PREFIX,
                 override, version=search_version(o))
@@ -138,7 +141,7 @@ def guess_nix_linker(env: 'Environment', compiler: T.List[str], comp_class: T.Ty
 
     v = search_version(o + e)
     linker: DynamicLinker
-    if 'LLD' in o.split('\n', maxsplit=1)[0]:
+    if 'LLD' in o.split('\n', maxsplit=1)[0] or 'tiarmlnk' in e:
         if isinstance(comp_class.LINKER_PREFIX, str):
             cmd = compiler + override + [comp_class.LINKER_PREFIX + '-v'] + extra_args
         else:

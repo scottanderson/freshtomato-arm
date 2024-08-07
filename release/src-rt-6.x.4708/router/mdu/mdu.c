@@ -389,7 +389,11 @@ static void curl_setup(const unsigned int ssl, const unsigned int no_dump)
 	CURLsslset result;
 	const char *dump;
 
+#ifdef USE_WOLFSSL
+	result = curl_global_sslset(CURLSSLBACKEND_WOLFSSL, NULL, NULL);
+#else
 	result = curl_global_sslset(CURLSSLBACKEND_OPENSSL, NULL, NULL);
+#endif
 	if ((result == CURLSSLSET_OK) || (result == CURLSSLSET_TOO_LATE))
 		curl_sslerr = 0;
 
@@ -1832,7 +1836,7 @@ int main(int argc, char *argv[])
 		/* via what WAN check external IP? */
 		snprintf(sPrefix, sizeof(sPrefix), (atoi(c + 1) == 1 ? "wan": "wan%s"), c + 1);
 		snprintf(ifname, sizeof(ifname), "%s", get_wanface(sPrefix));
-		if ((strcmp(ifname, "none") == 0) || (strcmp(nvram_safe_get(strlcat_r(sPrefix, "_proto", tmp, sizeof(tmp))), "disabled") == 0)) /* in some cases */
+		if ((strcmp(ifname, "none") == 0) || (get_wanx_proto(sPrefix) == WP_DISABLED)) /* in some cases */
 			memset(ifname, 0, sizeof(ifname)); /* reset again */
 	}
 
