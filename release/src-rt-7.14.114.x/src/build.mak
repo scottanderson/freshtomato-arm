@@ -22,13 +22,16 @@ ifneq ($(ASUS_TRX),0)
 	ctools/trx -o image/linux-lzma.trx ctools/vmlinuz-lzma ctools/target.squashfs
 
 # for Tri-Band SDK7.14 (currently only Asus RT-AC5300)/for Dual-Band SDK7.14 (currently Asus RT-AC3100 and RT-AC88U)
- ifeq ($(AC5300),y)
+ifeq ($(AC5300),y)
 	ctools/trx_asus -i image/linux-lzma.trx -r RT-AC5300,3.0.0.4,$(FORCE_SN),$(FORCE_EN),image/freshtomato-RT-AC5300-$(branch_rev)-$(current_TOMATO_VER)$(beta)$(current_V2)-$(current_BUILD_DESC).trx
- else
+else # AC5300
+ifneq ($(EXTSW),y)
 	ctools/trx_asus -i image/linux-lzma.trx -r RT-AC3100,3.0.0.4,$(FORCE_SN),$(FORCE_EN),image/freshtomato-RT-AC3100-$(branch_rev)-$(current_TOMATO_VER)$(beta)$(current_V2)-$(current_BUILD_DESC).trx
+else # EXTSW
 	ctools/trx_asus -i image/linux-lzma.trx -r RT-AC88U,3.0.0.4,$(FORCE_SN),$(FORCE_EN),image/freshtomato-RT-AC88U-$(branch_rev)-$(current_TOMATO_VER)$(beta)$(current_V2)-$(current_BUILD_DESC).trx
- endif
+endif # EXTSW
+endif # AC5300
 
 	@rm -f image/linux-lzma.trx
 	@echo ""
-endif
+endif # ASUS_TRX

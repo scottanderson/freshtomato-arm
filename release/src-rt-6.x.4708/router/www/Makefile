@@ -45,6 +45,15 @@ else
 	done
 endif
 
+# Only include external switch options if EXTSW is enabled.
+ifneq ($(EXTSW),y)
+	sed -i $(INSTALLDIR)/www/tomato.js -e "/EXTSW-BEGIN/,/EXTSW-END/d"
+	sed -i $(INSTALLDIR)/www/advanced-vlan.asp -e "/EXTSW-BEGIN/,/EXTSW-END/d"
+else
+	sed -i $(INSTALLDIR)/www/tomato.js -e "/EXTSW-NO-BEGIN/,/EXTSW-NO-END/d"
+	sed -i $(INSTALLDIR)/www/advanced-vlan.asp -e "/EXTSW-NO-BEGIN/,/EXTSW-NO-END/d"
+endif
+
 # Only include the CIFS pages if CIFS is configured in.
 ifneq ($(TCONFIG_CIFS),y)
 	rm -f $(INSTALLDIR)/www/admin-cifs.asp

@@ -84,6 +84,11 @@ ifneq ($(TCONFIG_BCMARM),y)
 else
 	sed -i $(INSTALLDIR)/usr/sbin/ethstate -e "/BCMARMNO-BEGIN/,/BCMARMNO-END/d"
 endif
+ifneq ($(EXTSW),y)
+	sed -i $(INSTALLDIR)/usr/sbin/ethstate -e "/EXTSW-BEGIN/,/EXTSW-END/d"
+else
+	sed -i $(INSTALLDIR)/usr/sbin/ethstate -e "/EXTSW-NO-BEGIN/,/EXTSW-NO-END/d"
+endif
 
 # stealthMode
 ifneq ($(TCONFIG_BCMARM),y)

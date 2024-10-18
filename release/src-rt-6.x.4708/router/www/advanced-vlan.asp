@@ -132,6 +132,9 @@ switch (nvram['t_model_name']) {
 		COL_P2N = '2';
 		COL_P3N = '1';
 		COL_P4N = '0';
+/* EXTSW-BEGIN */
+		COL_P5N = '5';
+/* EXTSW-END */
 		break;
 	case 'vlan-testid3':
 	case 'Asus RT-AC3200':
@@ -179,8 +182,16 @@ var COL_P3  = 8;
 var COL_P3T = 9;
 var COL_P4  = 10;
 var COL_P4T = 11;
+/* EXTSW-NO-BEGIN */
 var COL_VID_DEF = 12;
 var COL_BRI = 13;
+/* EXTSW-NO-END */
+/* EXTSW-BEGIN */
+var COL_P5  = 12;
+var COL_P5T = 13;
+var COL_VID_DEF = 14;
+var COL_BRI = 15;
+/* EXTSW-END */
 
 /* set to either 5 or 8 when nvram settings are read (FastE or GigE routers) */
 var SWITCH_INTERNAL_PORT = 0;
@@ -203,6 +214,10 @@ if (port_vlan_supported) {
 			{ type: 'checkbox', prefix: '<div class="centered">', suffix: '<\/div>' },
 			{ type: 'checkbox', prefix: '<div class="centered">', suffix: '<\/div>' },
 			{ type: 'checkbox', prefix: '<div class="centered">', suffix: '<\/div>' },
+/* EXTSW-BEGIN */
+			{ type: 'checkbox', prefix: '<div class="centered">', suffix: '<\/div>' },
+			{ type: 'checkbox', prefix: '<div class="centered">', suffix: '<\/div>' },
+/* EXTSW-END */
 			{ type: 'select', options: [[1,'none'],[2,'WAN0 bridge'],[3,'LAN0 (br0)'],[4,'LAN1 (br1)'],[5,'LAN2 (br2)'],[6,'LAN3 (br3)'],[7,'WAN1 bridge'],
 /* MULTIWAN-BEGIN */
 				[8,'WAN2 bridge'],[9,'WAN3 bridge']
@@ -211,10 +226,13 @@ if (port_vlan_supported) {
 
 		this.headerSet(['<br><br>VLAN', '<br><br>VID',
 		                '<div id="vport_0"><img src="eth_off.gif" id="eth_off_1" alt=""><\/div>'+(nvram.model == 'DSL-AC68U' ? 'DSL' : 'WAN'), '<br>Tag<br>'+(nvram.model == 'DSL-AC68U' ? 'DSL' : 'WAN'),
-		                '<div id="vport_1"><img src="eth_off.gif" id="eth_off_2" alt=""><\/div>1', '<br>Tag<br>1',
-		                '<div id="vport_2"><img src="eth_off.gif" id="eth_off_3" alt=""><\/div>2', '<br>Tag<br>2',
-		                '<div id="vport_3"><img src="eth_off.gif" id="eth_off_4" alt=""><\/div>3', '<br>Tag<br>3',
-		                '<div id="vport_4"><img src="eth_off.gif" id="eth_off_5" alt=""><\/div>4', '<br>Tag<br>4',
+		                '<div id="vport_1"><img src="eth_off.gif" id="eth_off_2" alt=""><\/div>LAN1', '<br>Tag<br>LAN1',
+		                '<div id="vport_2"><img src="eth_off.gif" id="eth_off_3" alt=""><\/div>LAN2', '<br>Tag<br>LAN2',
+		                '<div id="vport_3"><img src="eth_off.gif" id="eth_off_4" alt=""><\/div>LAN3', '<br>Tag<br>LAN3',
+		                '<div id="vport_4"><img src="eth_off.gif" id="eth_off_5" alt=""><\/div>LAN4', '<br>Tag<br>LAN4',
+/* EXTSW-BEGIN */
+		                '<div id="vport_5"><img src="eth_off.gif" id="eth_off_6" alt=""><\/div>extsw', '<br>Tag<br>extsw',
+/* EXTSW-END */
 		                '<br>Default<br>VLAN', 'Ethernet to<br>bridge<br>mapping']);
 
 		vlg.populate();
@@ -293,6 +311,9 @@ REMOVE-END */
 						port[COL_P2N], tagged[COL_P2N],
 						port[COL_P3N], tagged[COL_P3N],
 						port[COL_P4N], tagged[COL_P4N],
+/* EXTSW-BEGIN */
+						port[COL_P5N], tagged[COL_P5N],
+/* EXTSW-END */
 						(((nvram['vlan'+i+'ports']).indexOf('*') != -1) ? '1' : '0'),
 						(bridged[i] != null) ? bridged[i] : '1' ]);
 				}
@@ -384,6 +405,14 @@ REMOVE-END */
 			f[COL_P4T].disabled = 1;
 			f[COL_P4T].checked = 0;
 		}
+/* EXTSW-BEGIN */
+		if ((trunk_vlan_supported) && (f[COL_P5].checked == 1))
+			f[COL_P5T].disabled = 0;
+		else {
+			f[COL_P5T].disabled = 1;
+			f[COL_P5T].checked = 0;
+		}
+/* EXTSW-END */
 
 		/* Modifications to enable Native VLAN support (allow one untagged vlan per port) by default */
 		var err_vlan = 'Only one untagged VLAN per port is allowed (Native VLAN)';
@@ -427,6 +456,16 @@ REMOVE-END */
 			else
 				ferror.clear(f[COL_P4T]);
 		}
+/* EXTSW-BEGIN */
+		if ((f[COL_P5].checked == 1) && (this.countElem(COL_P5, 1) > 0)) {
+			if (((this.countElem(COL_P5, 1) - 1) >= this.countElem(COL_P5T, 1)) && (f[COL_P5T].checked == 0)) {
+				ferror.set(f[COL_P5T], err_vlan, quiet);
+				valid = 0;
+			}
+			else
+				ferror.clear(f[COL_P5T]);
+		}
+/* EXTSW-END */
 
 		if (this.countDefaultVID() > 0) {
 			f[COL_VID_DEF].disabled = 1;
@@ -502,6 +541,10 @@ REMOVE-END */
 			(data[COL_P3T].toString() != '0') ? '&#x1f530' : '',
 			(data[COL_P4].toString() != '0') ? '&#x2b50' : '',
 			(data[COL_P4T].toString() != '0') ? '&#x1f530' : '',
+/* EXTSW-BEGIN */
+			(data[COL_P5].toString() != '0') ? '&#x2b50' : '',
+			(data[COL_P5T].toString() != '0') ? '&#x1f530' : '',
+/* EXTSW-END */
 			(data[COL_VID_DEF].toString() != '0') ? '&#x1f6a9' : '',
 			['','WAN0 bridge','LAN0 (br0)','LAN1 (br1)','LAN2 (br2)','LAN3 (br3)','WAN1 bridge'
 /* MULTIWAN-BEGIN */
@@ -523,6 +566,10 @@ REMOVE-END */
 			(data[COL_P3T] != 0) ? 'checked' : '',
 			(data[COL_P4] != 0) ? 'checked' : '',
 			(data[COL_P4T] != 0) ? 'checked' : '',
+/* EXTSW-BEGIN */
+			(data[COL_P5] != 0) ? 'checked' : '',
+			(data[COL_P5T] != 0) ? 'checked' : '',
+/* EXTSW-END */
 			(data[COL_VID_DEF] != 0) ? 'checked' : '',
 			data[COL_BRI]];
 	}
@@ -541,6 +588,10 @@ REMOVE-END */
 			f[COL_P3T].checked ? 1 : 0,
 			f[COL_P4].checked ? 1 : 0,
 			f[COL_P4T].checked ? 1 : 0,
+/* EXTSW-BEGIN */
+			f[COL_P5].checked ? 1 : 0,
+			f[COL_P5T].checked ? 1 : 0,
+/* EXTSW-END */
 			f[COL_VID_DEF].checked ? 1 : 0,
 			f[COL_BRI].value];
 	}
@@ -647,6 +698,11 @@ REMOVE-END */
 		f[COL_P4].checked = 0;
 		f[COL_P4T].checked = 0;
 		f[COL_P4T].disabled = 1;
+/* EXTSW-BEGIN */
+		f[COL_P5].checked = 0;
+		f[COL_P5T].checked = 0;
+		f[COL_P5T].disabled = 1;
+/* EXTSW-END */
 		f[COL_VID_DEF].checked = 0;
 		if (this.countDefaultVID() > 0)
 			f[COL_VID_DEF].disabled = 1;
@@ -735,6 +791,12 @@ function save() {
 		p += (d[i][COL_P4].toString() != '0') ? COL_P4N : '';
 		p += ((trunk_vlan_supported) && (d[i][COL_P4T].toString() != '0')) ? 't' : '';
 		p += trailingSpace(p);
+
+/* EXTSW-BEGIN */
+		p += (d[i][COL_P5].toString() != '0') ? COL_P5N : '';
+		p += ((trunk_vlan_supported) && (d[i][COL_P5T].toString() != '0')) ? 't' : '';
+		p += trailingSpace(p);
+/* EXTSW-END */
 
 		p += (d[i][COL_VID_DEF].toString() != '0') ? (SWITCH_INTERNAL_PORT+'*') : SWITCH_INTERNAL_PORT;
 

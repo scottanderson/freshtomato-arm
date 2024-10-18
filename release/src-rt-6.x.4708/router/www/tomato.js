@@ -11,7 +11,12 @@
 
 /* global variables */
 var MAX_BRIDGE_ID = 3;
+/* EXTSW-NO-BEGIN */
 var MAX_PORT_ID = 4;
+/* EXTSW-NO-END */
+/* EXTSW-BEGIN */
+var MAX_PORT_ID = 5;
+/* EXTSW-END */
 var MAX_VLAN_ID = 15;
 /* DUALWAN-BEGIN */
 var xifs = [['wan','lan','lan1','lan2','lan3','wan2'],['WAN0','LAN0','LAN1','LAN2','LAN3','WAN1']];
