@@ -171,6 +171,10 @@ input[type="number"] {
 	font-weight: bold;
 }
 
+#navi .hidden {
+	display: none;
+}
+
 #content {
 	padding: 5px 4px 20px 4px;
 	vertical-align: top;

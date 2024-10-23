@@ -2680,9 +2680,8 @@ function navi() {
 	var i, j;
 	var buf = [];
 	var sm;
-	var a, b, c;
+	var a;
 	var on1;
-	var cexp = get_config('web_mx', '').toLowerCase();
 
 	name = myName();
 	if (name == 'restrict-edit.asp') name = 'restrict.asp';
@@ -2701,37 +2700,30 @@ function navi() {
 		if (m.length == 2)
 			buf.push('<a href="'+m[1]+'" class="indent1'+(((base == '') && (name == m[1])) ? ' active' : '')+'">'+m[0]+'</a>');
 		else {
-			if (base == m[1])
-				b = name;
-			else {
-				a = cookie.get('menu_' + m[1]);
-				b = m[3][0][1];
-				for (j = 0; j < m[3].length; ++j) {
-					if (m[3][j][1] == a) {
-						b = a;
-						break;
-					}
-				}
-			}
-			a = m[1]+'-'+b;
-			if (a == 'status-overview.asp') a = '/';
 			on1 = (base == m[1]);
-			buf.push('<a href="'+a+'" class="indent1'+(on1 ? ' active' : '')+'">'+m[0]+'</a>');
-			if ((!on1) && (m[2] == 0) && (cexp.indexOf(m[1]) == -1)) continue;
-
+			buf.push('<a class="indent1'+(on1 ? ' active' : '')+'" onclick="toggleMenu">'+m[0]+'</a>');
+			buf.push('<div id="menu_'+i+'"'+(on1 ? '' : ' class="hidden"')+'>');
 			for (j = 0; j < m[3].length; ++j) {
 				sm = m[3][j];
 				a = m[1]+'-'+sm[1];
 				if (a == 'status-overview.asp') a = '/';
-				buf.push('<a href="'+a+'" class="indent2'+(((on1) && (name == sm[1])) ? ' active' : '')+'">'+sm[0]+'</a>');
+				buf.push('<a href="'+a+'" class="indent2'+(((name == sm[1])) ? ' active' : '')+'">'+sm[0]+'</a>');
 			}
+			buf.push('</div>');
 		}
 	}
 	document.write(buf.join(''));
+}
 
-	if (base.length) {
-		if ((base == 'qos') && (name == 'detailed.asp')) name = 'view.asp';
-		cookie.set('menu_'+base, name);
+function toggleMenu(id) {
+	var e = E(id);
+	const active = e.classList.contains('active');
+	if (active) return;
+	const show = e.classList.contains('hidden');
+	if (show) {
+		e.classList.remove('hidden');
+	} else {
+		e.classList.add('hidden');
 	}
 }
 

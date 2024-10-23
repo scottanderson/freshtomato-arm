@@ -29,15 +29,6 @@ var shlimit = nvram.ne_shlimit.split(',');
 if (shlimit.length != 3)
 	shlimit = [0,3,60];
 
-var xmenus = [['Status','status'],['Bandwidth','bwm'],['IP Traffic','ipt'],['Tools','tools'],['Basic','basic'],['Advanced','advanced'],['Port Forwarding','forward'],['QoS','qos'],
-/* USB-BEGIN */
-              ['USB and NAS','nas'],
-/* USB-END */
-/* VPN-BEGIN */
-              ['VPN Tunneling','vpn'],
-/* VPN-END */
-              ['Administration','admin']];
-
 function show() {
 	var e = E('_sshd_button');
 	e.value = (isup.dropbear ? 'Stop' : 'Start')+' Now';
@@ -360,13 +351,6 @@ function save() {
 
 	fom.ne_shlimit.value = ((fom._f_limit_ssh.checked ? 1 : 0) | (fom._f_limit_telnet.checked ? 2 : 0))+','+fom._f_limit_hit.value+','+fom._f_limit_sec.value;
 
-	a = [];
-	for (i = 0; i < xmenus.length; ++i) {
-		b = xmenus[i][1];
-		if (E('_f_mx_'+b).checked)
-			a.push(b);
-	}
-	fom.web_mx.value = a.join(',');
 	fom._nofootermsg.value = 0;
 	fom._nextwait.value = 15;
 
@@ -433,7 +417,6 @@ function init() {
 <input type="hidden" name="ne_shlimit">
 <input type="hidden" name="rmgt_sip">
 <input type="hidden" name="sshd_forwarding">
-<input type="hidden" name="web_mx">
 <!-- JFFS2-BEGIN -->
 <input type="hidden" name="jffs2_auto_unmount">
 <!-- JFFS2-END -->
@@ -499,16 +482,10 @@ function init() {
 				{ title: 'TTB save folder', indent: 2, name: 'ttb_loc', type: 'text', maxlen: 35, size: 35, suffix: '&nbsp;/TomatoThemeBase <small>optional<\/small>', placeholder: 'empty = /tmp', value: nvram.ttb_loc },
 				{ title: 'TTB URL', indent: 2, name: 'ttb_url', type: 'text', maxlen: 128, size: 70, suffix: '&nbsp;<small>space separated<\/small>', value: nvram.ttb_url },
 /* USB-END */
-			null,
-			{ title: 'Open Menus' }
 		];
 
 		for (i = 1; i <= MAX_BRIDGE_ID; i++)
 			m.splice(i+3, 0, { title: 'Listen on LAN'+i+' (br'+i+')', name: 'f_http_lan'+i+'_listener', type: 'checkbox', value: (nvram.http_lan_listeners & (2 ** (i - 1)))},);
-
-		var webmx = get_config('web_mx', '').toLowerCase();
-		for (var i = 0; i < xmenus.length; ++i)
-			m.push({ title: xmenus[i][0], indent: 2, name: 'f_mx_'+xmenus[i][1], type: 'checkbox', value: (webmx.indexOf(xmenus[i][1]) != -1) });
 
 		createFieldTable('', m);
 	</script>
